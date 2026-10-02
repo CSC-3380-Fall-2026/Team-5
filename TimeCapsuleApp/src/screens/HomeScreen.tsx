@@ -3,11 +3,6 @@ function HomeScreen({ navigation }: any) {
   return (
     <View>
       <Text>Home Screen</Text>
-
-      <Button
-        title="Create Capsule"
-        onPress={() => navigation.navigate('CreateCapsule')}
-      />
       <Button
         title="My Capsules"
         onPress={() => navigation.navigate('MyCapsules')}
@@ -16,8 +11,20 @@ function HomeScreen({ navigation }: any) {
         title="Profile"
         onPress={() => navigation.navigate('Profile')}
       />
+      <Button
+         title="Memory Map"
+        onPress={() => navigation.navigate('MemoryMap')}
+        />
 
-    </View>
+        <Button     
+        title="Video Templates"
+        onPress={() => navigation.navigate('VideoTemplates')}
+        />
+        <Button
+        title="DMs"
+         onPress={() => navigation.navigate('DMs')}
+        />
+        </View>
   );
 }
 export default HomeScreen;

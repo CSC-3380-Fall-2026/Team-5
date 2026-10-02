@@ -6,8 +6,8 @@ function MyCapsulesScreen({ navigation }: any) {
       <Text>My Capsules Screen</Text>
 
       <Button
-        title="View Capsule Details"
-        onPress={() => navigation.navigate('CapsuleDetails')}
+        title="Create New Capsule"
+        onPress={() => navigation.navigate('CreateCapsule')}
       />
     </View>);
 }

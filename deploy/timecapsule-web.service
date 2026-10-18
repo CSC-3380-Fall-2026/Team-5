@@ -1,0 +1,23 @@
+[Unit]
+Description=Time Capsule Next.js profile UI
+After=network.target timecapsule-api.service
+
+[Service]
+Type=simple
+User=timecapsule
+Group=timecapsule
+WorkingDirectory=/opt/timecapsule/frontend
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+EnvironmentFile=/etc/timecapsule/web.env
+ExecStart=/usr/bin/node /opt/timecapsule/frontend/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

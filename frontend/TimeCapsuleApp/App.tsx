@@ -10,11 +10,13 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import MemoryMapScreen from './src/screens/MemoryMapScreen';
 import VideoTemplatesScreen from './src/screens/VideoTemplatesScreen';
 import DMScreen from './src/screens/DMScreen';
+import { CapsuleProvider } from './src/context/CapsuleContext';
 
 const Stack = createNativeStackNavigator();
 
 function App() {
   return (
+      <CapsuleProvider>
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Home">
         <Stack.Screen name="Home" component={HomeScreen} />
@@ -26,6 +28,7 @@ function App() {
         <Stack.Screen name="VideoTemplates" component={VideoTemplatesScreen} />
         <Stack.Screen name="DMs" component={DMScreen} />
       </Stack.Navigator>
-    </NavigationContainer> );
+    </NavigationContainer>
+    </CapsuleProvider>);
 }
 export default App;

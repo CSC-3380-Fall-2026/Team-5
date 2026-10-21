@@ -1,15 +1,20 @@
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
-
+import { Text, StyleSheet, Pressable } from 'react-native';
 import Card from './Card';
 import { Capsule } from '../context/CapsuleContext';
 
 type CapsuleCardProps = Readonly<{
   capsule: Capsule;
+  onPress?: () => void;
 }>;
 
-function CapsuleCard({ capsule }: CapsuleCardProps) {
+function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {  
+  const [month, day, year] = capsule.unlockDate.split('/').map(Number);
+  const unlockDate = new Date(year, month - 1, day);
+  const isUnlocked = new Date() >= unlockDate;
+
   return (
+    <Pressable onPress={onPress}>
     <Card>
       {/* Display name */}
       <Text style={styles.name}>{capsule.name}</Text>
@@ -21,8 +26,11 @@ function CapsuleCard({ capsule }: CapsuleCardProps) {
       <Text>Friends: {capsule.friends.length}</Text>
 
       {/* Shows the current capsule status */}
-      <Text style={styles.status}>Locked</Text>
-    </Card>
+      <Text style={styles.status}>
+        {isUnlocked ? 'Unlocked' : 'Locked'}
+      </Text>   
+      </Card>
+    </Pressable>
   );
 }
 

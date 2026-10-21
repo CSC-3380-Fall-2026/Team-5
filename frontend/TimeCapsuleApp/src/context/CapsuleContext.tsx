@@ -1,11 +1,16 @@
 import React, { createContext, ReactNode, useContext, useState, useCallback, useMemo } from 'react';
 
-// Defines the structure of a capsule used throughout the app
+// Defines the structure
+export type Memory = {
+  id: string;
+  text: string;
+};
 export type Capsule = {
   id: string;
   name: string;
   unlockDate: string;
   friends: string[];
+  memories?: string[];
 };
 
 type CapsuleContextType = {

@@ -1,6 +1,5 @@
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
-
+import { Text, StyleSheet, Pressable } from 'react-native';
 import Card from './Card';
 import LockedCapsuleView from './LockedCapsuleView';
 import { Capsule } from '../context/CapsuleContext';
@@ -8,6 +7,7 @@ import { isCapsuleLocked } from '../utils/capsuleLock';
 
 type CapsuleCardProps = Readonly<{
   capsule: Capsule;
+  onPress?: () => void;
 }>;
 
 function CapsuleCard({ capsule }: CapsuleCardProps) {
@@ -24,6 +24,7 @@ function CapsuleCard({ capsule }: CapsuleCardProps) {
 
   // Unlocked: show the normal card
   return (
+    <Pressable onPress={onPress}>
     <Card>
       {/* Display name */}
       <Text style={styles.name}>{capsule.name}</Text>

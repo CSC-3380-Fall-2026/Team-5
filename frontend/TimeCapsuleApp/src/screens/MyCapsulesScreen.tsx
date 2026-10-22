@@ -1,4 +1,4 @@
-﻿import { View, Text, Button, StyleSheet } from 'react-native';
+﻿import { View, Text, Button, StyleSheet, } from 'react-native';
 
 import CapsuleCard from '../components/CapsuleCard';
 import LockedCapsuleView from '../components/LockedCapsuleView';

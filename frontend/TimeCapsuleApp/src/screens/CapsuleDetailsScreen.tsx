@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Card from '../components/Card';
 
 function CapsuleDetailsScreen({ route }: any) {
   // Gets the capsule that was sent to this screen
@@ -37,26 +38,31 @@ function CapsuleDetailsScreen({ route }: any) {
         }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Capsule Details</Text>
+  <View style={styles.container}>
+    <Text style={styles.title}>Capsule Details</Text>
 
+    <Card>
+      {/* Displays the capsule name */}
       <View style={styles.section}>
         <Text style={styles.label}>Capsule Name</Text>
         <Text style={styles.value}>{capsule.name}</Text>
       </View>
 
+      {/* Displays the unlock date */}
       <View style={styles.section}>
         <Text style={styles.label}>Unlock Date</Text>
         <Text style={styles.value}>{capsule.unlockDate}</Text>
       </View>
 
-    <View style={styles.section}>
+      {/* Displays whether the capsule is locked */}
+      <View style={styles.section}>
         <Text style={styles.label}>Status</Text>
         <Text style={styles.value}>
-        {isUnlocked ? 'Unlocked' : 'Locked'}
+          {isUnlocked ? 'Unlocked' : 'Locked'}
         </Text>
-    </View>
+      </View>
 
+      {/* Displays friends */}
       <View style={styles.section}>
         <Text style={styles.label}>Friends</Text>
 
@@ -64,19 +70,23 @@ function CapsuleDetailsScreen({ route }: any) {
           <Text style={styles.value}>No friends added</Text>
         ) : (
           capsule.friends.map((friend: string) => (
-        <Text key={friend} style={styles.value}>
-            • {friend}
-        </Text>
-        ))
+            <Text key={friend} style={styles.value}>
+              • {friend}
+            </Text>
+          ))
         )}
       </View>
 
+      {/* Displays memory count or memories */}
       <View style={styles.section}>
         <Text style={styles.label}>Memories</Text>
         {renderMemories()}
-        </View>
-    </View>
-  );
+        
+      </View>
+    </Card>
+    
+  </View>
+);
 }
 
 

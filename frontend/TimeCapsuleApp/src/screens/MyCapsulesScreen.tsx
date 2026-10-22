@@ -1,7 +1,11 @@
 ﻿import { View, Text, Button, StyleSheet, } from 'react-native';
 
 import CapsuleCard from '../components/CapsuleCard';
+import LockedCapsuleView from '../components/LockedCapsuleView';
 import { useCapsules } from '../context/CapsuleContext';
+import { isCapsuleLocked } from '../utils/capsuleLock';
+
+
 
 function MyCapsulesScreen({ navigation }: any) {
   // Gets the shared list of capsules created in the app
@@ -20,15 +24,19 @@ function MyCapsulesScreen({ navigation }: any) {
         {capsules.length === 0 ? (
           <Text>No capsules yet.</Text>
         ) : (
-          capsules.map(capsule => (
-          <CapsuleCard
-            key={capsule.id}
-            capsule={capsule}
-            onPress={() =>
-              navigation.navigate('CapsuleDetails', { capsule })
+          capsules.map(capsule => {
+            if (isCapsuleLocked(capsule.unlockDate)) {
+              return (
+                <LockedCapsuleView
+                  key={capsule.id}
+                  name={capsule.name}
+                  unlockDate={capsule.unlockDate}
+                />
+              );
             }
-          />
-        ))
+
+            return <CapsuleCard key={capsule.id} capsule={capsule} />;
+          })
         )}
       </View>
     </View>

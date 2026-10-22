@@ -1,18 +1,28 @@
 import React from 'react';
 import { Text, StyleSheet, Pressable } from 'react-native';
 import Card from './Card';
+import LockedCapsuleView from './LockedCapsuleView';
 import { Capsule } from '../context/CapsuleContext';
+import { isCapsuleLocked } from '../utils/capsuleLock';
 
 type CapsuleCardProps = Readonly<{
   capsule: Capsule;
   onPress?: () => void;
 }>;
 
-function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {  
-  const [month, day, year] = capsule.unlockDate.split('/').map(Number);
-  const unlockDate = new Date(year, month - 1, day);
-  const isUnlocked = new Date() >= unlockDate;
+function CapsuleCard({ capsule }: CapsuleCardProps) {
+  const locked = isCapsuleLocked(capsule.unlockDate);
 
+  // Locked: hide the contents and show the locked view
+  if (locked) {
+    return (
+      <Card>
+        <LockedCapsuleView name={capsule.name} unlockDate={capsule.unlockDate} />
+      </Card>
+    );
+  }
+
+  // Unlocked: show the normal card
   return (
     <Pressable onPress={onPress}>
     <Card>
@@ -26,11 +36,8 @@ function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
       <Text>Friends: {capsule.friends.length}</Text>
 
       {/* Shows the current capsule status */}
-      <Text style={styles.status}>
-        {isUnlocked ? 'Unlocked' : 'Locked'}
-      </Text>   
-      </Card>
-    </Pressable>
+      <Text style={styles.status}>Unlocked</Text>
+    </Card>
   );
 }
 

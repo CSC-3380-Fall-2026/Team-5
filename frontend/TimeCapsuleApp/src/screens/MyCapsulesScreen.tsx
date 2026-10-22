@@ -1,4 +1,4 @@
-﻿import { View, Text, Button, StyleSheet } from 'react-native';
+﻿import { View, Text, Button, StyleSheet, } from 'react-native';
 
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
@@ -21,11 +21,14 @@ function MyCapsulesScreen({ navigation }: any) {
           <Text>No capsules yet.</Text>
         ) : (
           capsules.map(capsule => (
-            <CapsuleCard
-              key={capsule.id}
-              capsule={capsule}
-            />
-          ))
+          <CapsuleCard
+            key={capsule.id}
+            capsule={capsule}
+            onPress={() =>
+              navigation.navigate('CapsuleDetails', { capsule })
+            }
+          />
+        ))
         )}
       </View>
     </View>

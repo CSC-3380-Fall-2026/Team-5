@@ -1,86 +1,102 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Button } from 'react-native';
 
-function CapsuleDetailsScreen({ route }: any) {
-  // Gets the capsule that was sent to this screen
-    const { capsule } = route.params;
-    const memories = capsule.memories ?? [];
-    const [month, day, year] = capsule.unlockDate.split('/').map(Number);
-    const unlockDate = new Date(year, month - 1, day);
+import Card from '../components/Card';
 
-    //Checks whether the capsule has reached its unlock date
-    const isUnlocked = new Date() >= unlockDate;
+function CapsuleDetailsScreen({ route, navigation }: any) {
+  const { capsule } = route.params;
+  const memories = capsule.memories ?? [];
+  const [month, day, year] = capsule.unlockDate.split('/').map(Number);
+  const unlockDate = new Date(year, month - 1, day);
+  const isUnlocked = new Date() >= unlockDate;
 
-    //what is shown in memory section; locked = number; unlocked = lost of mems
-    function renderMemories() {
-        if (!isUnlocked) {
-            return (
-            <Text style={styles.value}>
-                {memories.length} memories added
-            </Text>
-            );
-        }
-
-        if (memories.length === 0) {
-            return (
-            <Text style={styles.value}>
-                No memories were added.
-            </Text>
-            );
-        }
-
-        return memories.map((memory: { id: string; text: string }) => (
-        <Text key={memory.id} style={styles.value}>
-            • {memory.text}
+  // Controls what is shown in the memory section
+  function renderMemories() {
+    // If locked, only show the number of memories
+    if (!isUnlocked) {
+      return (
+        <Text style={styles.value}>
+          {memories.length} memories added
         </Text>
-        ));
-        }
+      );
+    }
+
+    // If unlocked but empty
+    if (memories.length === 0) {
+      return (
+        <Text style={styles.value}>
+          No memories were added.
+        </Text>
+      );
+    }
+
+    // If unlocked, show the actual memories
+    return memories.map((memory: { id: string; text: string }) => (
+      <Text key={memory.id} style={styles.value}>
+        • {memory.text}
+      </Text>
+    ));
+  }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Capsule Details</Text>
 
-      <View style={styles.section}>
-        <Text style={styles.label}>Capsule Name</Text>
-        <Text style={styles.value}>{capsule.name}</Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Unlock Date</Text>
-        <Text style={styles.value}>{capsule.unlockDate}</Text>
-      </View>
-
-    <View style={styles.section}>
-        <Text style={styles.label}>Status</Text>
-        <Text style={styles.value}>
-        {isUnlocked ? 'Unlocked' : 'Locked'}
-        </Text>
-    </View>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Friends</Text>
-
-        {capsule.friends.length === 0 ? (
-          <Text style={styles.value}>No friends added</Text>
-        ) : (
-          capsule.friends.map((friend: string) => (
-        <Text key={friend} style={styles.value}>
-            • {friend}
-        </Text>
-        ))
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Memories</Text>
-        {renderMemories()}
+      <Card>
+        {/* Displays the capsule name */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Capsule Name</Text>
+          <Text style={styles.value}>{capsule.name}</Text>
         </View>
+
+        {/* Displays the unlock date */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Unlock Date</Text>
+          <Text style={styles.value}>{capsule.unlockDate}</Text>
+        </View>
+
+        {/* Displays whether the capsule is locked */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Status</Text>
+          <Text style={styles.value}>
+            {isUnlocked ? 'Unlocked' : 'Locked'}
+          </Text>
+        </View>
+
+        {/* Displays friends */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Friends</Text>
+
+          {capsule.friends.length === 0 ? (
+            <Text style={styles.value}>No friends added</Text>
+          ) : (
+            capsule.friends.map((friend: string) => (
+              <Text key={friend} style={styles.value}>
+                • {friend}
+              </Text>
+            ))
+          )}
+        </View>
+
+        {/* Displays memory count or memories */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Memories</Text>
+          {renderMemories()}
+        </View>
+
+        {/* Opens the Add Memory screen for this capsule */}
+        <Button
+          title="Add Memory"
+          onPress={() =>
+            navigation.navigate('AddMemory', { capsule })
+          }
+        />
+      </Card>
     </View>
   );
 }
 
-
-//styles;  update later
+// Styles; can be updated later
 const styles = StyleSheet.create({
   container: {
     flex: 1,

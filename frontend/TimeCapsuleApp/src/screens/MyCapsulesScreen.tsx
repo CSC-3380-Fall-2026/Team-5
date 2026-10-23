@@ -3,6 +3,8 @@
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
 
+
+
 function MyCapsulesScreen({ navigation }: any) {
   // Gets the shared list of capsules created in the app
   const { capsules } = useCapsules();
@@ -20,15 +22,15 @@ function MyCapsulesScreen({ navigation }: any) {
         {capsules.length === 0 ? (
           <Text>No capsules yet.</Text>
         ) : (
-          capsules.map(capsule => (
-          <CapsuleCard
-            key={capsule.id}
-            capsule={capsule}
-            onPress={() =>
-              navigation.navigate('CapsuleDetails', { capsule })
-            }
-          />
-        ))
+              capsules.map(capsule => (
+  <CapsuleCard
+    key={capsule.id}
+    capsule={capsule}
+    onPress={() =>
+      navigation.navigate('CapsuleDetails', { capsule })
+    }
+  />
+))
         )}
       </View>
     </View>

@@ -1,34 +1,44 @@
 import React from 'react';
 import { Text, StyleSheet, Pressable } from 'react-native';
+
 import Card from './Card';
+import LockedCapsuleView from './LockedCapsuleView';
 import { Capsule } from '../context/CapsuleContext';
+import { isCapsuleLocked } from '../utils/capsuleLock';
 
 type CapsuleCardProps = Readonly<{
   capsule: Capsule;
   onPress?: () => void;
 }>;
 
-function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {  
-  const [month, day, year] = capsule.unlockDate.split('/').map(Number);
-  const unlockDate = new Date(year, month - 1, day);
-  const isUnlocked = new Date() >= unlockDate;
+function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
+  // Checks whether this capsule is still locked
+  const locked = isCapsuleLocked(capsule.unlockDate);
 
   return (
     <Pressable onPress={onPress}>
-    <Card>
-      {/* Display name */}
-      <Text style={styles.name}>{capsule.name}</Text>
+      <Card>
+        {locked ? (
+          <LockedCapsuleView
+            name={capsule.name}
+            unlockDate={capsule.unlockDate}
+            memoryCount={capsule.memories?.length ?? 0}
+          />
+        ) : (
+          <>
+            {/* Capsule name */}
+            <Text style={styles.name}>{capsule.name}</Text>
 
-      {/* Displays date */}
-      <Text>Opens: {capsule.unlockDate}</Text>
+            {/* Unlock date */}
+            <Text>Opens: {capsule.unlockDate}</Text>
 
-      {/* Displays friends*/}
-      <Text>Friends: {capsule.friends.length}</Text>
+            {/* Number of friends */}
+            <Text>Friends: {capsule.friends.length}</Text>
 
-      {/* Shows the current capsule status */}
-      <Text style={styles.status}>
-        {isUnlocked ? 'Unlocked' : 'Locked'}
-      </Text>   
+            {/* Capsule status */}
+            <Text style={styles.status}>Unlocked</Text>
+          </>
+        )}
       </Card>
     </Pressable>
   );
@@ -40,6 +50,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 6,
   },
+
   status: {
     marginTop: 8,
     fontWeight: '600',

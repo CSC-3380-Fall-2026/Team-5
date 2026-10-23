@@ -12,6 +12,7 @@ import VideoTemplatesScreen from './src/screens/VideoTemplatesScreen';
 import DMScreen from './src/screens/DMScreen';
 import { CapsuleProvider } from './src/context/CapsuleContext';
 import CapsuleDetailsScreen from './src/screens/CapsuleDetailsScreen';
+import AddMemoryScreen from './src/screens/AddMemoryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,6 +30,7 @@ function App() {
         <Stack.Screen name="VideoTemplates" component={VideoTemplatesScreen} />
         <Stack.Screen name="DMs" component={DMScreen} />
         <Stack.Screen name="CapsuleDetails" component={CapsuleDetailsScreen}/>
+        <Stack.Screen name="AddMemory" component={AddMemoryScreen}/>
       </Stack.Navigator>
     </NavigationContainer>
     </CapsuleProvider>);

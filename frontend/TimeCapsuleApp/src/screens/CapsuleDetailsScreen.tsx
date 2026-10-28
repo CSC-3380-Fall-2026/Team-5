@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Button } from 'react-native';
+import { View, Text, StyleSheet, Button, Image, ScrollView} from 'react-native';
 
 import Card from '../components/Card';
 
@@ -31,15 +31,24 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
     }
 
     // If unlocked, show the actual memories
-    return memories.map((memory: { id: string; text: string }) => (
-      <Text key={memory.id} style={styles.value}>
+   return memories.map(
+  (memory: { id: string; text: string; photoUri: string }) => (
+    <View key={memory.id} style={styles.memory}>
+      <Text style={styles.value}>
         • {memory.text}
       </Text>
-    ));
+
+      <Image
+        source={{ uri: memory.photoUri }}
+        style={styles.memoryPhoto}
+      />
+    </View>
+  ),
+);
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Capsule Details</Text>
 
       <Card>
@@ -91,8 +100,12 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
             navigation.navigate('AddMemory', { capsule })
           }
         />
+
+        
       </Card>
-    </View>
+
+      
+    </ScrollView>
   );
 }
 
@@ -122,6 +135,17 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 16,
   },
+
+  memory: {
+  marginBottom: 20,
+},
+
+memoryPhoto: {
+  width: '100%',
+  height: 200,
+  marginTop: 10,
+  borderRadius: 8,
+},
 });
 
 export default CapsuleDetailsScreen;

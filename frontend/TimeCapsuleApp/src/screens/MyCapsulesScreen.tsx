@@ -2,12 +2,13 @@
 
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
+import DataState from '../components/DataState';
 
 
 
 function MyCapsulesScreen({ navigation }: any) {
   // Gets the shared list of capsules created in the app
-  const { capsules } = useCapsules();
+  const { capsules, loading, error, reload } = useCapsules();
 
   return (
     <View style={styles.container}>
@@ -19,20 +20,23 @@ function MyCapsulesScreen({ navigation }: any) {
       />
 {/* Displays the created capsules */}
       <View style={styles.list}>
-        {capsules.length === 0 ? (
-          <Text>No capsules yet.</Text>
-        ) : (
-              capsules.map(capsule => (
-  <CapsuleCard
-    key={capsule.id}
-    capsule={capsule}
-    onPress={() =>
-      navigation.navigate('CapsuleDetails', { capsule })
-    }
-  />
-))
-        )}
-      </View>
+  <DataState
+    loading={loading}
+    error={error}
+    isEmpty={capsules.length === 0}
+    emptyTitle="No capsules yet"
+    emptyMessage="Tap Create New Capsule to start your first one."
+    onRetry={reload}
+  >
+    {capsules.map(capsule => (
+      <CapsuleCard
+        key={capsule.id}
+        capsule={capsule}
+        onPress={() => navigation.navigate('CapsuleDetails', { capsule })}
+      />
+    ))}
+  </DataState>
+  </View>
     </View>
   );
 }

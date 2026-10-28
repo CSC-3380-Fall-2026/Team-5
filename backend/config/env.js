@@ -30,6 +30,11 @@ function validateDatabaseConfig(config) {
 
   if (!config.user) missing.push("DB_USER");
   if (!config.password) missing.push("DB_PASSWORD");
+    if (config.password === "ENTER_YOUR_MYSQL_PASSWORD") {
+      throw new Error(
+        "Please replace ENTER_YOUR_MYSQL_PASSWORD with your actual MySQL password in backend/.env."
+      );
+    }
   if (!config.database) missing.push("DB_NAME");
 
   if (missing.length > 0) {

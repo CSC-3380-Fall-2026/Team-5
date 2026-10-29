@@ -15,6 +15,9 @@ export type Capsule = {
 // Defines what data/functions are available through the capsule context
 type CapsuleContextType = {
   capsules: Capsule[];
+  loading: boolean;
+  error: string | null;
+  reload: () => void;
   addCapsule: (capsule: Capsule) => void;
   addMemory: (capsuleId: string, memory: Memory) => void;
 };
@@ -32,7 +35,9 @@ export function CapsuleProvider({
   children,
 }: CapsuleProviderProps) {
   const [capsules, setCapsules] = useState<Capsule[]>([]);
-
+  const loading = false;
+  const error: string | null = null;
+  const reload = useCallback(() => {}, []);
   // Adds a new capsule
   const addCapsule = useCallback((capsule: Capsule) => {
     setCapsules(currentCapsules => [
@@ -67,10 +72,13 @@ export function CapsuleProvider({
   const contextValue = useMemo(
     () => ({
       capsules,
+      loading,
+      error,
+      reload,
       addCapsule,
       addMemory,
     }),
-    [capsules, addCapsule, addMemory],
+    [capsules, loading, error, reload, addCapsule, addMemory],
   );
 
   return (

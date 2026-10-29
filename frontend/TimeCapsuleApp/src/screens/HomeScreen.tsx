@@ -2,11 +2,12 @@
 import { ScrollView,Text, Button, StyleSheet, } from 'react-native';
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
+import DataState from '../components/DataState';
 
 
 // Gets the shared list of capsules created in the app
 function HomeScreen({ navigation }: any) {
-  const { capsules } = useCapsules();
+  const { capsules, loading, error, reload } = useCapsules();
 
   return (
     <ScrollView style={styles.container}>
@@ -39,18 +40,18 @@ function HomeScreen({ navigation }: any) {
 
       <Text style={styles.feedTitle}>Capsule Feed</Text>
 
-      {capsules.length === 0 ? (
-        // Shows a message if no capsules have been created
-        <Text>No capsules to display yet.</Text>
-      ) : (
-        // Creates CapsuleCard for each saved capsule
-        capsules.map(capsule => (
-          <CapsuleCard
-            key={capsule.id}
-            capsule={capsule}
-          />
-        ))
-      )}
+      <DataState
+    loading={loading}
+    error={error}
+    isEmpty={capsules.length === 0}
+    emptyTitle="No capsules to display yet"
+    emptyMessage="Create a capsule from My Capsules to see it here."
+    onRetry={reload}
+>
+  {capsules.map(capsule => (
+    <CapsuleCard key={capsule.id} capsule={capsule} />
+  ))}
+</DataState>
     </ScrollView>
   );
 }

@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { API_BASE_URL } from '../../services/api';
+import { saveAuthToken } from '../../services/authStorage';
 import {
   View,
   Text,
@@ -12,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 
 export default function LoginScreen() {
@@ -20,9 +23,49 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
 
-  const handleLogin = () => {
+//This changes the LOG IN button from automatically opening Home to actually checking the email and password against the MySQL-backed API.
+const handleLogin = async () => {
+  if (!email.trim() || !password) {
+    Alert.alert('Missing Information', 'Please enter your email and password.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: email.trim(),
+        password,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      Alert.alert('Login Failed', data.error || 'Invalid credentials.');
+      return;
+    }
+
+    if (typeof data.token !== 'string' || !data.token) {
+      Alert.alert('Login Failed', 'The server did not return a login token.');
+      return;
+    }
+
+    await saveAuthToken(data.token);
+
     navigation.replace('Home');
-  };
+  } catch (error) {
+    console.error('Login error:', error);
+    Alert.alert(
+      'Connection Error',
+      'Could not connect to the Time Capsule server.',
+    );
+  }
+};
+
 
   return (
     <SafeAreaView style={styles.safeArea}>

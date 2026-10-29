@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const mysql = require("mysql2/promise");
+const bcrypt = require("bcryptjs");
 require("dotenv").config();
 
 const seedFile = path.join(__dirname, "..", "data", "seed-data.json");
@@ -21,10 +22,54 @@ async function main() {
     database: process.env.DB_NAME,
   });
 
-  try {
-    await connection.beginTransaction();
+try {
+  await connection.beginTransaction();
 
-    // Insert users first because other tables reference them.
+  // Create or update the default admin account for the class project.
+  const adminEmail = "admin@gmail.com";
+  const adminPassword = "TimeCapsule3380!";
+
+  const [existingAdmins] = await connection.execute(
+    "SELECT id FROM app_users WHERE email = ?",
+    [adminEmail]
+  );
+
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
+
+  if (existingAdmins.length === 0) {
+    const crypto = require("node:crypto");
+    const adminId = crypto.randomBytes(6).readUIntBE(0, 6);
+
+    await connection.execute(
+      `INSERT INTO app_users (id, name, email, password_hash, role)
+      VALUES (?, ?, ?, ?, ?)`,
+      [
+        adminId,
+        "Time Capsule Admin",
+        adminEmail,
+        passwordHash,
+        "admin",
+      ]
+    );
+
+    console.log("Default admin account created.");
+  } else {
+    await connection.execute(
+      `UPDATE app_users
+      SET name = ?, password_hash = ?, role = ?
+      WHERE email = ?`,
+      [
+        "Time Capsule Admin",
+        passwordHash,
+        "admin",
+        adminEmail,
+      ]
+    );
+
+    console.log("Default admin account updated.");
+  }
+
+  // Insert users first because other tables reference them.
     for (const user of data.users) {
       await connection.execute(
         `INSERT INTO app_users (id, name, email, bio)

@@ -1,19 +1,16 @@
-# [Name of the Project] : [Team Number]
+# Time Capsule App : Team 5
 # Members
-Project Manager: [Name] ([GitHub Name])\
-Communications Lead: [Name] ([GitHub Name])\
-Git Master: [Name] ([GitHub Name])\
-Design Lead: [Name] ([GitHub Name])\
-Quality Assurance Tester: [Name] ([GitHub Name])
+Project Manager: Liem Tran (ltran20LSU)\
+Communications Lead: Reese Foret (reeseforet)\
+Git Master: Ellie Bendich (ellieb44)\
+Design Lead: Mikayla Ashely (mashl11)\
+Quality Assurance Tester: Alana Rattanaxay (alanar12240)
 
 # About Our Software
 
 Describe a little about what the project is about here.
 ## Platforms Tested on
-- MacOS
 - Android
-- iOS
-- Linux
 - Windows
 # Important Links
 Kanban Board: [link]\

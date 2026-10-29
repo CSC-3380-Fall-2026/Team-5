@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS app_users (
     name VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     bio TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    password_hash VARCHAR(255) NULL,
+    role ENUM('user', 'admin') NOT NULL DEFAULT 'user'
 );
 
 CREATE TABLE IF NOT EXISTS capsule_groups (

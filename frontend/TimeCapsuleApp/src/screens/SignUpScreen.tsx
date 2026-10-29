@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE_URL } from '../services/api';
 import {
   View,
   Text,
@@ -20,41 +21,57 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSignUp = () => {
-    if (
-      !name.trim() ||
-      !email.trim() ||
-      !password ||
-      !confirmPassword
-    ) {
-      Alert.alert('Missing Information', 'Please complete all fields.');
+
+const handleSignUp = async () => {
+  if (!name.trim() || !email.trim() || !password || !confirmPassword) {
+    Alert.alert('Missing Information', 'Please complete all fields.');
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    return;
+  }
+
+  if (password.length < 8 || password.length > 72) {
+    Alert.alert('Invalid Password', 'Password must be 8–72 characters.');
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    Alert.alert('Password Mismatch', 'Your passwords do not match.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      Alert.alert('Sign Up Failed', data.error || 'Unable to create account.');
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.');
-      return;
-    }
+    Alert.alert('Account Created', 'You can now log in.', [
+      { text: 'OK', onPress: () => navigation.goBack() },
+    ]);
+  } catch (error) {
+    console.error('Signup error:', error);
+    Alert.alert('Connection Error', 'Could not connect to the server.');
+  }
+};
 
-    if (password.length < 8) {
-      Alert.alert(
-        'Weak Password',
-        'Your password must contain at least 8 characters.',
-      );
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', 'Your passwords do not match.');
-      return;
-    }
-
-    // TODO: Connect this form to your team's registration API.
-    Alert.alert(
-      'Sign Up Form Ready',
-      'Your form is valid. Account creation is not connected yet.',
-    );
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>

@@ -26,17 +26,17 @@ export default function LockedCapsuleView({
       <Text style={styles.status}>🔒 This capsule is locked</Text>
 
       {/* Displays the unlock date */}
-      <Text>Opens on {unlockDate}</Text>
+      <Text style={styles.detailText}>Opens on {unlockDate}</Text>
 
       {/* Shows how many memories have been added without revealing them */}
-      <Text>
+      <Text style={styles.detailText}>
         {memoryCount === 1
           ? '1 memory added'
           : `${memoryCount} memories added`}
       </Text>
 
       {/* Displays the countdown until the unlock date */}
-      <Text>
+      <Text style={styles.countdown}>
         {days === 1 ? '1 day to go' : `${days} days to go`}
       </Text>
     </View>
@@ -45,14 +45,30 @@ export default function LockedCapsuleView({
 
 const styles = StyleSheet.create({
   name: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 6,
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#50382B',
+    marginBottom: 8,
   },
 
   status: {
-    marginTop: 6,
+    marginTop: 4,
+    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#735641',
+  },
+
+  detailText: {
+    fontSize: 14,
+    color: '#806A58',
     marginBottom: 4,
+  },
+
+  countdown: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#5B4435',
+    marginTop: 4,
   },
 });

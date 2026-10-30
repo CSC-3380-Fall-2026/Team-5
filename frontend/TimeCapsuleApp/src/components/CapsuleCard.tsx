@@ -16,7 +16,12 @@ function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
   const locked = isCapsuleLocked(capsule.unlockDate);
 
   return (
-    <Pressable onPress={onPress}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        pressed && styles.cardPressed,
+      ]}
+    >
       <Card>
         {locked ? (
           <LockedCapsuleView
@@ -46,15 +51,22 @@ function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
 
 const styles = StyleSheet.create({
   name: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#50382B',
+  marginBottom: 6,
+},
 
-  status: {
-    marginTop: 8,
-    fontWeight: '600',
-  },
+status: {
+  marginTop: 8,
+  fontWeight: '700',
+  color: '#735641',
+},
+  
+
+cardPressed: {
+  opacity: 0.75,
+},
 });
 
 export default CapsuleCard;

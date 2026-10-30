@@ -1,9 +1,9 @@
-﻿import { View, Text, Button, StyleSheet, } from 'react-native';
+﻿import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
 import DataState from '../components/DataState';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 
 function MyCapsulesScreen({ navigation }: any) {
@@ -11,13 +11,32 @@ function MyCapsulesScreen({ navigation }: any) {
   const { capsules, loading, error, reload } = useCapsules();
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>My Capsules</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container}>            <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+      >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate('Home')}
+        >
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
 
-      <Button
-        title="Create New Capsule"
-        onPress={() => navigation.navigate('CreateCapsule')}
-      />
+
+      </TouchableOpacity>
+      <View style={styles.header}>
+        <Text style={styles.title}>MY CAPSULES</Text>
+        <Text style={styles.subtitle}>Keep track of the memories you are saving.</Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={() => navigation.navigate('CreateCapsule')} >
+        <Text style={styles.createButtonText}>CREATE NEW CAPSULE</Text>
+      </TouchableOpacity>
+
+
 {/* Displays the created capsules */}
       <View style={styles.list}>
   <DataState
@@ -37,7 +56,8 @@ function MyCapsulesScreen({ navigation }: any) {
     ))}
   </DataState>
   </View>
-    </View>
+      </ScrollView>
+</SafeAreaView>
   );
 }
 
@@ -45,17 +65,68 @@ function MyCapsulesScreen({ navigation }: any) {
 // Styles; Can be updated later
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  list: {
-    marginTop: 20,
-  },
+  flex: 1,
+  backgroundColor: '#E8D8BE',
+  padding: 20,
+},
+
+list: {
+  marginTop: 10,
+},
+
+header: {
+  alignItems: 'center',
+  marginTop: 0,
+  marginBottom: 24,
+},
+
+title: {
+  fontSize: 26,
+  fontWeight: '800',
+  color: '#50382B',
+  letterSpacing: 2,
+},
+
+subtitle: {
+  fontSize: 14,
+  color: '#806A58',
+  marginTop: 6,
+  fontStyle: 'italic',
+  textAlign: 'center',
+},
+
+createButton: {
+  backgroundColor: '#F8F0E3',
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  borderRadius: 10,
+  paddingVertical: 16,
+  alignItems: 'center',
+  marginBottom: 20,
+},
+
+createButtonText: {
+  color: '#50382B',
+  fontSize: 15,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
+
+backButton: {
+  alignSelf: 'flex-start',
+  marginTop: 8,
+  marginBottom: 8,
+},
+
+backButtonText: {
+  color: '#735641',
+  fontSize: 16,
+  fontWeight: '700',
+},
+safeArea: {
+  flex: 1,
+  backgroundColor: '#E8D8BE',
+},
 });
 
 export default MyCapsulesScreen;

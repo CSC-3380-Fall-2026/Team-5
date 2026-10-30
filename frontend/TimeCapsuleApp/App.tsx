@@ -13,6 +13,8 @@ import DMScreen from './src/screens/DMScreen';
 import { CapsuleProvider } from './src/context/CapsuleContext';
 import LoginScreen from './src/login screen/src/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
+import CapsuleDetailsScreen from './src/screens/CapsuleDetailsScreen';
+import AddMemoryScreen from './src/screens/AddMemoryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -31,7 +33,9 @@ function App() {
         <Stack.Screen name="MemoryMap" component={MemoryMapScreen} />
         <Stack.Screen name="VideoTemplates" component={VideoTemplatesScreen} />
         <Stack.Screen name="DMs" component={DMScreen} />
-    </Stack.Navigator>
+        <Stack.Screen name="CapsuleDetails" component={CapsuleDetailsScreen} />
+        <Stack.Screen name="AddMemory" component={AddMemoryScreen} />
+      </Stack.Navigator>
     </NavigationContainer>
     </CapsuleProvider>);
 }

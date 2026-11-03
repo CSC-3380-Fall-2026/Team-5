@@ -24,6 +24,11 @@ function HomeScreen({ navigation }: any) {
       />
 
       <Button
+        title="Friends"
+        onPress={() => navigation.navigate('Friends')}
+      />
+
+      <Button
         title="Memory Map"
         onPress={() => navigation.navigate('MemoryMap')}
       />

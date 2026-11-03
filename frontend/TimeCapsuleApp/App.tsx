@@ -13,6 +13,7 @@ import DMScreen from './src/screens/DMScreen';
 import { CapsuleProvider } from './src/context/CapsuleContext';
 import LoginScreen from './src/login screen/src/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
+import FriendsListScreen from './src/screens/FriendsListScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +25,7 @@ function App() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="SignUp" component={SignUpScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Friends" component={FriendsListScreen} />
         <Stack.Screen name="CreateCapsule" component={CreateCapsuleScreen} />
         <Stack.Screen name="MyCapsules" component={MyCapsulesScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />

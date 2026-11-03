@@ -62,15 +62,20 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  message: {
-    textAlign: 'center',
-    marginVertical: 8,
-  },
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#5B4435',
+  marginBottom: 4,
+  textAlign: 'center',
+},
+
+message: {
+  fontSize: 13,
+  color: '#806A58',
+  textAlign: 'center',
+  marginVertical: 6,
+  lineHeight: 19,
+},
 });
 
 export default DataState;

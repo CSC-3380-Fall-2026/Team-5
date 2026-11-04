@@ -15,9 +15,16 @@ import { API_BASE_URL } from '../services/api';
 import { getAuthToken } from '../services/authStorage';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
+import { useCapsules } from '../context/CapsuleContext';
 
 function CapsuleDetailsScreen({ route, navigation }: any) {
-  const { capsule } = route.params;
+  const { capsule: routeCapsule } = route.params;
+  const { capsules } = useCapsules();
+
+  // Gets the newest version of the capsule from context
+  const capsule =
+    capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
+
   const memories = capsule.memories ?? [];
 
   const [modalVisible, setModalVisible] = useState(false);

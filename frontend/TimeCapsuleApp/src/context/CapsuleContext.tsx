@@ -20,6 +20,7 @@ type CapsuleContextType = {
   reload: () => void;
   addCapsule: (capsule: Capsule) => void;
   addMemory: (capsuleId: string, memory: Memory) => void;
+  setCapsulesFromBackend: (capsules: Capsule[]) => void;
 };
 
 const CapsuleContext = createContext<CapsuleContextType | undefined>(
@@ -44,6 +45,12 @@ export function CapsuleProvider({
       ...currentCapsules,
       capsule,
     ]);
+  }, 
+  
+  []);
+    // Replaces the current capsule list with capsules loaded from the backend
+  const setCapsulesFromBackend = useCallback((backendCapsules: Capsule[]) => {
+    setCapsules(backendCapsules);
   }, []);
 
   // Adds a memory to a specific capsule
@@ -70,16 +77,25 @@ export function CapsuleProvider({
 
   // Makes the shared values available to the rest of the app
   const contextValue = useMemo(
-    () => ({
-      capsules,
-      loading,
-      error,
-      reload,
-      addCapsule,
-      addMemory,
-    }),
-    [capsules, loading, error, reload, addCapsule, addMemory],
-  );
+  () => ({
+    capsules,
+    loading,
+    error,
+    reload,
+    addCapsule,
+    addMemory,
+    setCapsulesFromBackend,
+  }),
+  [
+    capsules,
+    loading,
+    error,
+    reload,
+    addCapsule,
+    addMemory,
+    setCapsulesFromBackend,
+  ],
+);
 
   return (
     <CapsuleContext.Provider value={contextValue}>

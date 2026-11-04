@@ -256,6 +256,111 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
   }
 });
 
+app.post("/api/capsules", authenticateUser, async (req, res) => {
+  try {
+    const { title, description, opensAt } = req.body ?? {};
+
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      typeof opensAt !== "string" ||
+      !opensAt.trim()
+    ) {
+      return res.status(400).json({
+        error: "Capsule title and unlock date are required.",
+      });
+    }
+
+    const capsuleId = crypto.randomInt(1, 2147483647);
+    const groupId = crypto.randomInt(1, 2147483647);
+
+    await pool.execute(
+      `INSERT INTO capsule_groups
+       (id, name, created_by)
+       VALUES (?, ?, ?)`,
+      [groupId, title.trim(), req.userId]
+    );
+
+    await pool.execute(
+      `INSERT INTO group_members
+       (group_id, user_id)
+       VALUES (?, ?)`,
+      [groupId, req.userId]
+    );
+
+    await pool.execute(
+      `INSERT INTO capsules
+       (id, group_id, created_by, title, description, opens_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        capsuleId,
+        groupId,
+        req.userId,
+        title.trim(),
+        typeof description === "string" ? description.trim() : null,
+        opensAt,
+      ]
+    );
+
+    return res.status(201).json({
+      message: "Capsule created successfully.",
+      capsule: {
+        id: String(capsuleId),
+        groupId: String(groupId),
+        createdBy: String(req.userId),
+        title: title.trim(),
+        description:
+          typeof description === "string" ? description.trim() : null,
+        opensAt,
+      },
+    });
+  } catch (error) {
+    console.error("Capsule creation failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to create capsule.",
+    });
+  }
+});
+
+app.get("/api/capsules", authenticateUser, async (req, res) => {
+  try {
+    const [capsules] = await pool.execute(
+      `SELECT
+         capsules.id,
+         capsules.group_id,
+         capsules.created_by,
+         capsules.title,
+         capsules.description,
+         capsules.opens_at,
+         capsules.created_at
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE group_members.user_id = ?
+       ORDER BY capsules.created_at DESC`,
+      [req.userId]
+    );
+
+    return res.json({
+      capsules: capsules.map((capsule) => ({
+        id: String(capsule.id),
+        groupId: String(capsule.group_id),
+        createdBy: String(capsule.created_by),
+        title: capsule.title,
+        description: capsule.description,
+        opensAt: capsule.opens_at,
+        createdAt: capsule.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("Capsule lookup failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to load capsules.",
+    });
+  }
+});
 
 async function startServer() {
   pool = mysql.createPool({

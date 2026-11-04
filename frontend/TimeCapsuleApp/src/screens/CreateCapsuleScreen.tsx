@@ -3,6 +3,8 @@ import {View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity } from '
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCapsules } from '../context/CapsuleContext';
 import Modal from '../components/Modal';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
 
 function CreateCapsuleScreen({ navigation }: any) {  const [capsuleName, setCapsuleName] = useState('');
   const [month, setMonth] = useState('');
@@ -57,47 +59,94 @@ function CreateCapsuleScreen({ navigation }: any) {  const [capsuleName, setCaps
 
 
 // Validates the form, creates a capsule, and saves it
-  function createCapsule() {
-    if (
-      capsuleName.trim() === '' ||
-      month === '' ||
-      day === '' ||
-      year === ''
-    ) {
-      setModalTitle('Missing Information');
-      setModalMessage('Please complete all required fields.');
+  async function createCapsule() {
+  // Makes sure all required capsule fields are filled in
+  if (
+    capsuleName.trim() === '' ||
+    month === '' ||
+    day === '' ||
+    year === ''
+  ) {
+    setModalTitle('Missing Information');
+    setModalMessage('Please complete all required fields.');
+    setModalVisible(true);
+    return;
+  }
+
+  try {
+    // Gets the saved login token so the backend knows which user is creating the capsule
+    const token = await getAuthToken();
+
+    // Stops creation if the user is no longer logged in
+    if (!token) {
+      setModalTitle('Login Required');
+      setModalMessage('Please log in again before creating a capsule.');
       setModalVisible(true);
       return;
     }
 
+    // Converts the entered month/day/year into the format MySQL expects
+const opensAt = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')} 00:00:00`;
 
-// Creates new capsule with entered info 
+    // Sends the new capsule information to the backend
+    const response = await fetch(`${API_BASE_URL}/api/capsules`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title: capsuleName.trim(),
+        description: null,
+        opensAt,
+      }),
+    });
+
+    // Reads the response returned from the backend
+    const data = await response.json();
+
+    // Shows an error if the backend could not create the capsule
+    if (!response.ok) {
+      setModalTitle('Capsule Creation Failed');
+      setModalMessage(data.error || 'Unable to create capsule.');
+      setModalVisible(true);
+      return;
+    }
+
+    // Creates the frontend version of the capsule using the ID from MySQL
     const newCapsule = {
-      id: Date.now().toString(),
-      name: capsuleName.trim(),
+      id: data.capsule.id,
+      name: data.capsule.title,
       unlockDate: `${month}/${day}/${year}`,
       friends,
     };
 
+    // Adds the capsule to the current app state so it appears immediately
     addCapsule(newCapsule);
 
+    // Shows a success message after the capsule is created
     setModalTitle('Capsule Created');
+    setModalMessage(
+      `${capsuleName}\n${month}/${day}/${year}\nFriends: ${friends.join(', ')}`,
+    );
+    setModalVisible(true);
 
-setModalMessage(
-  `${capsuleName}\n${month}/${day}/${year}\nFriends: ${friends.join(', ')}`,
-);
-
-setModalVisible(true);
-
-//Clears form after creation
+    // Clears the form after successful creation
     setCapsuleName('');
     setMonth('');
     setDay('');
     setYear('');
     setFriendInput('');
     setFriends([]);
-  }
+  } catch (error) {
+    console.error('Capsule creation error:', error);
 
+    // Shows an error if the app cannot connect to the backend
+    setModalTitle('Connection Error');
+    setModalMessage('Could not connect to the Time Capsule server.');
+    setModalVisible(true);
+  }
+}
  return (
   <SafeAreaView style={styles.safeArea}>
     <ScrollView style={styles.container}>

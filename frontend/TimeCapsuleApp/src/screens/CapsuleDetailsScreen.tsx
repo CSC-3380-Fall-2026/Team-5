@@ -1,6 +1,7 @@
 import React from 'react';
 import {View,Text,StyleSheet,Image,ScrollView,TouchableOpacity,} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { isCapsuleLocked } from '../utils/capsuleLock';
 
 import Card from '../components/Card';
 
@@ -8,15 +9,8 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
   const { capsule } = route.params;
   const memories = capsule.memories ?? [];
 
-  // Converts the saved unlock date into a Date object
-  const [month, day, year] = capsule.unlockDate
-    .split('/')
-    .map(Number);
-
-  const unlockDate = new Date(year, month - 1, day);
-
-  // Checks whether the capsule has reached its unlock date
-  const isUnlocked = new Date() >= unlockDate;
+  // Uses the shared capsule lock helper so every screen follows the same unlock rules
+  const isUnlocked = !isCapsuleLocked(capsule.unlockDate);
 
   // Controls what is shown in the memories section
   function renderMemories() {

@@ -377,6 +377,77 @@ async function startServer() {
     console.log("MySQL connection successful");
   });
 }
+// Deletes a capsule created by the logged-in user
+app.delete("/api/capsules/:id", authenticateUser, async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const capsuleId = req.params.id;
+
+    // Makes sure the capsule belongs to the logged-in user
+    const [capsules] = await connection.execute(
+      `SELECT id, group_id
+       FROM capsules
+       WHERE id = ? AND created_by = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have permission to delete it.",
+      });
+    }
+
+    const groupId = capsules[0].group_id;
+
+    await connection.beginTransaction();
+
+    // Deletes any memories/messages connected to the capsule
+    await connection.execute(
+      `DELETE FROM messages
+       WHERE capsule_id = ?`,
+      [capsuleId]
+    );
+
+    // Deletes the capsule itself
+    await connection.execute(
+      `DELETE FROM capsules
+       WHERE id = ?`,
+      [capsuleId]
+    );
+
+    // Removes everyone from the capsule group
+    await connection.execute(
+      `DELETE FROM group_members
+       WHERE group_id = ?`,
+      [groupId]
+    );
+
+    // Deletes the now-unused group
+    await connection.execute(
+      `DELETE FROM capsule_groups
+       WHERE id = ?`,
+      [groupId]
+    );
+
+    await connection.commit();
+
+    return res.json({
+      message: "Capsule deleted successfully.",
+    });
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("Capsule deletion failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to delete capsule.",
+    });
+  } finally {
+    connection.release();
+  }
+});
 
 startServer().catch((error) => {
   console.error("Failed to start API:", error.message);

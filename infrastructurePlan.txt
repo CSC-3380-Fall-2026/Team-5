@@ -1,0 +1,80 @@
+======================================================================
+TIME CAPSULE APP - INFRASTRUCTURE OVERVIEW
+
+Author: Liem Tran (Project Manager)
+Last Updated: October 3, 2026
+Status: Active / In Progress
+
+======================================================================
+
+SELECTED INFRASTRUCTURE STACK
+
+Frontend Architecture:
+
+Framework: React Native
+
+Target Platforms: Cross-platform mobile (iOS & Android)
+
+Backend & Hosting:
+
+Application Framework: Spring Boot (Java RESTful API backend handling
+business logic, user accounts, groups, capsules, and push scheduling).
+
+Cloud Hosting: Virtual Private Server (VPS).
+
+Deployment Architecture: Direct host deployment managed via systemd
+services and Nginx reverse proxy with SSL/TLS termination.
+(Note: Docker is NOT being used for this deployment pipeline).
+
+Database & Storage:
+
+Relational Database: MySQL hosted on the VPS / managed server instance.
+Stores structured application data (users, group memberships,
+capsule release dates, memory metadata, locations).
+
+Media & Blob Storage: AWS S3 / S3-compatible cloud object storage
+dedicated to hosting uploaded high-res photos, user media, and
+compiled recap videos.
+
+Third-Party Services & Integrations:
+
+Push Notifications: Firebase Cloud Messaging (FCM) / APNs for capsule
+opening alerts and group updates.
+
+Maps & Geolocation: Google Maps API / Mapbox SDK for the interactive
+Memory Map feature and location tagging.
+
+======================================================================
+2. WORK IN PROGRESS & ONGOING TASKS
+
+Current Focus Areas:
+[x] System Architecture Diagram: Drafted overall design connecting
+Mobile Client -> Spring API -> MySQL / S3 Storage.
+[x] Cost & Specs Evaluation: Evaluated price-to-performance tiers
+for S3 media storage, notification gateways, and map API pricing.
+[/] Architecture Refinement: Fine-tuning API endpoint specs, payload
+structures, and database schemas.
+[/] Infrastructure Integration Requirements: Setting up VPS environment
+configs, Nginx reverse proxy, security/firewall rules, and S3 bucket
+policies.
+
+Next Implementation Steps:
+
+Finalize VPS environment setup, firewall rules, and systemd service scripts.
+
+Implement backend file upload pipeline using direct presigned S3 URLs
+to reduce load on API servers.
+
+Set up cron/scheduled tasks in Spring Boot for automated capsule release
+unlocking and trigger notification pushes.
+
+Perform load and cost tests on video slideshow processing workflows.
+
+======================================================================
+3. NOTES & REMINDERS
+
+Storage bucket permissions must remain strictly private; media URLs
+should only be generated via presigned tokens once a time capsule date
+has officially unlocked.
+
+Ensure proper Nginx rate-limiting on VPS endpoints to prevent abuse.

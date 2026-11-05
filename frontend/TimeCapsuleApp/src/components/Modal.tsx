@@ -29,7 +29,7 @@ function Modal({ visible, title, children, onClose }: ModalProps) {
           {children}
 
           <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>Close</Text>
+            <Text style={styles.closeText}>OK</Text>
           </Pressable>
         </View>
       </View>
@@ -42,26 +42,40 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(61, 48, 40, 0.45)',
+    padding: 24,
   },
+
   modal: {
     width: '85%',
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 16,
+    backgroundColor: '#F8F0E3',
+    borderWidth: 1,
+    borderColor: '#BFA88D',
   },
+
   title: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#50382B',
     marginBottom: 12,
   },
+
   closeButton: {
-    marginTop: 16,
-    padding: 10,
+    marginTop: 20,
+    backgroundColor: '#735641',
+    height: 48,
+    borderRadius: 8,
+    justifyContent: 'center',
     alignItems: 'center',
   },
+
   closeText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 1,
   },
 });
 

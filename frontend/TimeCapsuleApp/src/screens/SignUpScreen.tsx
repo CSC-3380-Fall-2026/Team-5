@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+
+import Modal from '../components/Modal';
 
 export default function SignUpScreen() {
   const navigation = useNavigation();
@@ -21,25 +22,61 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [goBackAfterModal, setGoBackAfterModal] = useState(false);
+
+  function showModal(
+    title: string,
+    message: string,
+    goBack = false,
+  ) {
+    setModalTitle(title);
+    setModalMessage(message);
+    setGoBackAfterModal(goBack);
+    setModalVisible(true);
+  }
+
+  function closeModal() {
+    setModalVisible(false);
+
+    if (goBackAfterModal) {
+      setGoBackAfterModal(false);
+      navigation.goBack();
+    }
+  }
 
 const handleSignUp = async () => {
   if (!name.trim() || !email.trim() || !password || !confirmPassword) {
-    Alert.alert('Missing Information', 'Please complete all fields.');
+    showModal(
+      'Missing Information',
+      'Please complete all fields.',
+    );
     return;
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-    Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    showModal(
+      'Invalid Email',
+      'Please enter a valid email address.',
+    );
     return;
   }
 
   if (password.length < 8 || password.length > 72) {
-    Alert.alert('Invalid Password', 'Password must be 8–72 characters.');
+    showModal(
+      'Invalid Password',
+      'Password must be 8–72 characters.',
+    );
     return;
   }
 
   if (password !== confirmPassword) {
-    Alert.alert('Password Mismatch', 'Your passwords do not match.');
+    showModal(
+      'Password Mismatch',
+      'Your passwords do not match.',
+    );
     return;
   }
 
@@ -59,16 +96,25 @@ const handleSignUp = async () => {
     const data = await response.json();
 
     if (!response.ok) {
-      Alert.alert('Sign Up Failed', data.error || 'Unable to create account.');
+      showModal(
+        'Sign Up Failed',
+        data.error || 'Unable to create account.',
+      );
       return;
     }
 
-    Alert.alert('Account Created', 'You can now log in.', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
+    showModal(
+      'Account Created',
+      'You can now log in.',
+      true,
+    );
   } catch (error) {
     console.error('Signup error:', error);
-    Alert.alert('Connection Error', 'Could not connect to the server.');
+
+    showModal(
+      'Connection Error',
+      'Could not connect to the server.',
+    );
   }
 };
 
@@ -76,12 +122,20 @@ const handleSignUp = async () => {
   return (
     <SafeAreaView style={styles.safeArea}>
         <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={true}
-            nestedScrollEnabled={true}
->   
+    style={{ flex: 1 }}
+    contentContainerStyle={styles.scrollContent}
+    keyboardShouldPersistTaps="handled"
+    showsVerticalScrollIndicator={true}
+    nestedScrollEnabled={true}
+  >
+    {/* Back button */}
+    <TouchableOpacity
+      style={styles.backButton}
+      onPress={() => navigation.goBack()}
+    >
+      <Text style={styles.backButtonText}>← Back</Text>
+    </TouchableOpacity>
+
           <View style={styles.card}>
             <View style={styles.logoCircle}>
               <Text style={styles.logoIcon}>✉</Text>
@@ -173,6 +227,17 @@ const handleSignUp = async () => {
               </TouchableOpacity>
             </View>
           </View>
+
+          <Modal
+            visible={modalVisible}
+            title={modalTitle}
+            onClose={closeModal}
+          >
+            <Text style={styles.modalMessage}>
+              {modalMessage}
+            </Text>
+          </Modal>
+
       </ScrollView>
   </SafeAreaView>
   );
@@ -318,4 +383,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textDecorationLine: 'underline',
   },
+  backButton: {
+  alignSelf: 'flex-start',
+  marginBottom: 12,
+},
+
+backButtonText: {
+  color: '#735641',
+  fontSize: 16,
+  fontWeight: '700',
+},
+
+modalMessage: {
+  fontSize: 15,
+  color: '#806A58',
+  lineHeight: 22,
+},
 });

@@ -39,6 +39,13 @@ function HomeScreen({ navigation }: any) {
 
         <TouchableOpacity
           style={styles.menuButton}
+          onPress={() => navigation.navigate('Friends')}
+        >
+          <Text style={styles.menuButtonText}>FRIENDS</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuButton}
           onPress={() => navigation.navigate('MemoryMap')}
         >
           <Text style={styles.menuButtonText}>MEMORY MAP</Text>

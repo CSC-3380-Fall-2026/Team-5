@@ -13,6 +13,7 @@ import DMScreen from './src/screens/DMScreen';
 import { CapsuleProvider } from './src/context/CapsuleContext';
 import LoginScreen from './src/login screen/src/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
+import FriendsListScreen from './src/screens/FriendsListScreen';
 import CapsuleDetailsScreen from './src/screens/CapsuleDetailsScreen';
 import AddMemoryScreen from './src/screens/AddMemoryScreen';
 
@@ -26,6 +27,7 @@ function App() {
         <Stack.Screen name="Login" component={LoginScreen}   options={{ headerShown: false }}/>
         <Stack.Screen name="SignUp" component={SignUpScreen}options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Friends" component={FriendsListScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="CreateCapsule" component={CreateCapsuleScreen}   options={{ headerShown: false }}/>
         <Stack.Screen name="MyCapsules" component={MyCapsulesScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="CapsuleDetails" component={CapsuleDetailsScreen} options={{ headerShown: false }}/>

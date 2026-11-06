@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import {View, Text, TextInput, StyleSheet, Image, ScrollView, TouchableOpacity,} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { validateMemory, hasErrors, MemoryErrors } from '../utils/memoryValidation';
 
 import { useCapsules } from '../context/CapsuleContext';
 
 function AddMemoryScreen({ route, navigation }: any) {
   const [memoryText, setMemoryText] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-
+  const [errors, setErrors] = useState<MemoryErrors>({});
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
 
@@ -22,19 +23,24 @@ function AddMemoryScreen({ route, navigation }: any) {
 
     if (selectedPhoto?.uri) {
       setPhotoUri(selectedPhoto.uri);
+      // A photo was chosen, so clear the photo error
+      setErrors(current => ({ ...current, photo: undefined }));
     }
   }
 
   // Saves the new memory to the selected capsule
   function handleAddMemory() {
-    if (memoryText.trim() === '' || photoUri === null) {
+    // Check the form first; stop and show messages if something is missing
+    const validationErrors = validateMemory(memoryText, photoUri);
+    setErrors(validationErrors);
+    if (hasErrors(validationErrors)) {
       return;
     }
 
     const newMemory = {
       id: Date.now().toString(),
       text: memoryText.trim(),
-      photoUri,
+      photoUri: photoUri ?? '',
     };
 
     addMemory(capsule.id, newMemory);
@@ -66,13 +72,20 @@ function AddMemoryScreen({ route, navigation }: any) {
         <Text style={styles.label}>MEMORY</Text>
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.text ? styles.inputError : null]}
           placeholder="Write a memory..."
           placeholderTextColor="#9A8A7A"
           value={memoryText}
-          onChangeText={setMemoryText}
+          onChangeText={value => {
+            setMemoryText(value);
+            // The user is typing, so clear the text error
+            if (errors.text) {
+              setErrors(current => ({ ...current, text: undefined }));
+            }
+          }}
           multiline
         />
+        {errors.text ? <Text style={styles.error}>{errors.text}</Text> : null}
 
         {/* Photo selection */}
         <Text style={styles.label}>PHOTO</Text>
@@ -85,6 +98,7 @@ function AddMemoryScreen({ route, navigation }: any) {
             CHOOSE PHOTO
           </Text>
         </TouchableOpacity>
+        {errors.photo ? <Text style={styles.error}>{errors.photo}</Text> : null}
 
         {/* Selected photo preview */}
         {photoUri ? (
@@ -117,6 +131,17 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#E8D8BE',
+  },
+
+  // Validation messages
+  error: {
+    color: '#c62828',
+    marginTop: 6,
+    marginBottom: 12,
+  },
+
+  inputError: {
+    borderColor: '#c62828',
   },
 
   container: {

@@ -255,7 +255,42 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
     });
   }
 });
+// Gets registered users for the Friends directory.
+app.get("/api/users/discover", authenticateUser, async (req, res) => {
+  try {
+    const search =
+      typeof req.query.search === "string"
+        ? req.query.search.trim().slice(0, 100)
+        : "";
 
+    const [users] = await pool.execute(
+      `SELECT id, name, bio
+       FROM app_users
+       WHERE id <> ?
+         AND role = 'user'
+         AND name LIKE ?
+       ORDER BY name ASC
+       LIMIT 100`,
+      [req.userId, `%${search}%`]
+    );
+
+    return res.json({
+      users: users.map((user) => ({
+        id: String(user.id),
+        name: user.name,
+        bio: user.bio,
+      })),
+    });
+  } catch (error) {
+    console.error("Discover users failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to load users.",
+    });
+  }
+});
+
+// Creates a capsule for the logged-in user
 app.post("/api/capsules", authenticateUser, async (req, res) => {
   try {
     const { title, description, opensAt } = req.body ?? {};
@@ -323,6 +358,7 @@ app.post("/api/capsules", authenticateUser, async (req, res) => {
   }
 });
 
+// Loads capsules that the logged-in user belongs to
 app.get("/api/capsules", authenticateUser, async (req, res) => {
   try {
     const [capsules] = await pool.execute(

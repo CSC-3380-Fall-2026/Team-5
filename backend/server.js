@@ -290,6 +290,207 @@ app.get("/api/users/discover", authenticateUser, async (req, res) => {
   }
 });
 
+
+/*
+ Creates a capsule using registered MySQL users.
+ Saves the capsule, its group, and its members together.
+*/
+app.post("/api/capsules", authenticateUser, async (req, res) => {
+  const { name, unlockDate, friendIds = [] } = req.body ?? {};
+
+  if (
+    typeof name !== "string" ||
+    !name.trim() ||
+    name.trim().length > 150
+  ) {
+    return res.status(400).json({
+      error: "Enter a capsule name up to 150 characters.",
+    });
+  }
+
+  if (
+    typeof unlockDate !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(unlockDate)
+  ) {
+    return res.status(400).json({
+      error: "Invalid unlock date format.",
+    });
+  }
+
+
+  const [year, month, day] = unlockDate.split("-").map(Number);
+  const parsedDate = new Date(`${unlockDate}T00:00:00Z`);
+
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() + 1 !== month ||
+    parsedDate.getUTCDate() !== day ||
+    unlockDate <= new Date().toISOString().slice(0, 10)
+  ) {
+    return res.status(400).json({
+      error: "Choose a valid future unlock date.",
+    });
+  }
+
+  if (
+    !Array.isArray(friendIds) ||
+    friendIds.length > 100 ||
+    !friendIds.every(
+      id => typeof id === "string" && /^[1-9]\d*$/.test(id)
+    ) ||
+    new Set(friendIds).size !== friendIds.length ||
+    friendIds.includes(String(req.userId))
+  ) {
+    return res.status(400).json({
+      error: "Invalid or duplicate friend IDs.",
+    });
+  }
+
+  let connection;
+
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Make sure every selected friend is a registered, non-admin user.
+    if (friendIds.length > 0) {
+      const placeholders = friendIds.map(() => "?").join(",");
+
+      const [users] = await connection.query(
+        `SELECT id FROM app_users
+         WHERE id IN (${placeholders})
+         AND role = 'user'`,
+        friendIds
+      );
+
+      if (users.length !== friendIds.length) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          error: "One or more selected friends were not found.",
+        });
+      }
+    }
+
+    const groupId = crypto.randomInt(1, 2147483647);
+    const capsuleId = crypto.randomInt(1, 2147483647);
+    const cleanName = name.trim();
+
+    await connection.execute(
+      `INSERT INTO capsule_groups (id, name, created_by)
+       VALUES (?, ?, ?)`,
+      [groupId, cleanName, req.userId]
+    );
+
+    // Include the capsule creator as a member.
+    for (const userId of [String(req.userId), ...friendIds]) {
+      await connection.execute(
+        `INSERT INTO group_members (group_id, user_id)
+         VALUES (?, ?)`,
+        [groupId, userId]
+      );
+    }
+
+    await connection.execute(
+      `INSERT INTO capsules
+       (id, group_id, created_by, title, description, opens_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        capsuleId,
+        groupId,
+        req.userId,
+        cleanName,
+        null,
+        `${unlockDate} 00:00:00`,
+      ]
+    );
+
+    await connection.commit();
+
+    return res.status(201).json({
+      message: "Capsule created successfully.",
+      capsule: {
+        id: String(capsuleId),
+        groupId: String(groupId),
+        name: cleanName,
+        unlockDate,
+        friendIds,
+      },
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
+    console.error("Capsule creation failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to create capsule.",
+    });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+});
+
+/*
+ Returns capsules belonging to the logged-in user.
+ Includes capsules they created and capsules they joined.
+*/
+app.get("/api/capsules", authenticateUser, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+         c.id,
+         c.title,
+         c.opens_at,
+         u.name AS friend_name
+       FROM capsules c
+       JOIN group_members current_member
+         ON c.group_id = current_member.group_id
+       LEFT JOIN group_members other_member
+         ON c.group_id = other_member.group_id
+         AND other_member.user_id <> ?
+       LEFT JOIN app_users u
+         ON other_member.user_id = u.id
+       WHERE current_member.user_id = ?
+       ORDER BY c.created_at DESC, c.id, u.name`,
+      [req.userId, req.userId]
+    );
+
+    const capsuleMap = new Map();
+
+    for (const row of rows) {
+      const id = String(row.id);
+
+      if (!capsuleMap.has(id)) {
+        capsuleMap.set(id, {
+          id,
+          name: row.title,
+          unlockDate: row.opens_at,
+          friends: [],
+        });
+      }
+
+      if (row.friend_name) {
+        capsuleMap.get(id).friends.push(row.friend_name);
+      }
+    }
+
+    return res.json({
+      capsules: Array.from(capsuleMap.values()),
+    });
+  } catch (error) {
+    console.error("Failed to load capsules:", error);
+
+    return res.status(500).json({
+      error: "Unable to load capsules.",
+    });
+  }
+});
+
 async function startServer() {
   pool = mysql.createPool({
     ...dbConfig,

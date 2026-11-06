@@ -1,16 +1,27 @@
-﻿import React, { useState } from 'react';
-import {View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+﻿
+import React, { useEffect, useState } from 'react';import {View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCapsules } from '../context/CapsuleContext';
 import Modal from '../components/Modal';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
+
+type RegisteredUser = {
+  id: string;
+  name: string;
+  bio: string | null;
+};
 
 function CreateCapsuleScreen({ navigation }: any) {  const [capsuleName, setCapsuleName] = useState('');
   const [month, setMonth] = useState('');
   const [day, setDay] = useState('');
   const [year, setYear] = useState('');
   const [friendInput, setFriendInput] = useState('');
-  const [friends, setFriends] = useState<string[]>([]);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [friends, setFriends] = useState<RegisteredUser[]>([]);
+  const [searchResults, setSearchResults] = useState<RegisteredUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');  const [modalVisible, setModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
 
@@ -45,68 +56,180 @@ function CreateCapsuleScreen({ navigation }: any) {  const [capsuleName, setCaps
     }
   }
 
-  //adds friend to list after hitting enter 
-  function addFriend() {
-  const newFriend = friendInput.trim();
 
-  if (newFriend !== '' && !friends.includes(newFriend)) {
-    setFriends([...friends, newFriend]);
-    setFriendInput('');
-  }
-}
+  // Search for registered users in MySQL as the user types.
+  useEffect(() => {
+    let cancelled = false;
 
-
-// Validates the form, creates a capsule, and saves it
-  function createCapsule() {
-    if (
-      capsuleName.trim() === '' ||
-      month === '' ||
-      day === '' ||
-      year === ''
-    ) {
-      setModalTitle('Missing Information');
-      setModalMessage('Please complete all required fields.');
-      setModalVisible(true);
+    if (!friendInput.trim()) {
+      setSearchResults([]);
+      setSearchError('');
+      setSearching(false);
       return;
     }
 
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      setSearchError('');
 
-// Creates new capsule with entered info 
+      try {
+        const token = await getAuthToken();
+
+        if (!token) {
+          throw new Error('Please log in again.');
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/users/discover?search=${encodeURIComponent(friendInput.trim())}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Unable to search users.');
+        }
+
+        if (!cancelled) {
+          setSearchResults(data.users);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSearchResults([]);
+          setSearchError(
+            error instanceof Error ? error.message : 'Search failed.',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setSearching(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [friendInput]);
+
+  // Add a selected registered user.
+  function addFriend(user: RegisteredUser) {
+    setFriends(current =>
+      current.some(friend => friend.id === user.id)
+        ? current
+        : [...current, user],
+    );
+
+    setFriendInput('');
+    setSearchResults([]);
+  }
+
+  // Remove a selected friend.
+  function removeFriend(userId: string) {
+    setFriends(current =>
+      current.filter(friend => friend.id !== userId),
+    );
+  }
+
+
+
+async function createCapsule() {
+  if (saving) return;
+
+  if (
+    !capsuleName.trim() ||
+    !month ||
+    !day ||
+    !year
+  ) {
+    setModalTitle('Missing Information');
+    setModalMessage('Please complete all required fields.');
+    setModalVisible(true);
+    return;
+  }
+
+  const unlockDate =
+    `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+
+  setSaving(true);
+
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      throw new Error('Please log in again.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/capsules`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: capsuleName.trim(),
+        unlockDate,
+        friendIds: friends.map(friend => friend.id),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Unable to create capsule.');
+    }
+
     const newCapsule = {
-      id: Date.now().toString(),
-      name: capsuleName.trim(),
+      id: data.capsule.id,
+      name: data.capsule.name,
       unlockDate: `${month}/${day}/${year}`,
-      friends,
+      friends: friends.map(friend => friend.name),
     };
 
     addCapsule(newCapsule);
 
     setModalTitle('Capsule Created');
+    setModalMessage(
+      `${newCapsule.name}\nUnlock Date: ${newCapsule.unlockDate}\nFriends: ${newCapsule.friends.join(', ') || 'None'}`,
+    );
+    setModalVisible(true);
 
-setModalMessage(
-  `${capsuleName}\n${month}/${day}/${year}\nFriends: ${friends.join(', ')}`,
-);
-
-setModalVisible(true);
-
-//Clears form after creation
     setCapsuleName('');
     setMonth('');
     setDay('');
     setYear('');
     setFriendInput('');
     setFriends([]);
+    setSearchResults([]);
+  } catch (error) {
+    setModalTitle('Capsule Creation Failed');
+    setModalMessage(
+      error instanceof Error
+        ? error.message
+        : 'Unable to create capsule.',
+    );
+    setModalVisible(true);
+  } finally {
+    setSaving(false);
   }
+}
+
 
  return (
   <SafeAreaView style={styles.safeArea}>
     <ScrollView style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.navigate('MyCapsules')}
-      >
-        <Text style={styles.backButtonText}>← Back</Text>
-      </TouchableOpacity>
+
+    <TouchableOpacity
+      style={styles.backButton}
+      onPress={() => navigation.navigate('MyCapsules')}
+    >
+      <Text style={styles.backButtonText}>← Back</Text>
+    </TouchableOpacity>
 
       <View style={styles.header}>
         <Text style={styles.title}>CREATE CAPSULE</Text>
@@ -159,29 +282,76 @@ setModalVisible(true);
       />
     </View>
 
-      <Text style={styles.label}>ADD FRIENDS</Text>
+      
+    <Text style={styles.label}>ADD FRIENDS</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Enter friend's username"
-        placeholderTextColor="#9A8A7A"
-        value={friendInput}
-        onChangeText={setFriendInput}
-        onSubmitEditing={addFriend}
-      />
+    <TextInput
+      style={styles.input}
+      placeholder="Search registered users..."
+      placeholderTextColor="#9A8A7A"
+      value={friendInput}
+      onChangeText={setFriendInput}
+    />
 
-      {friends.map(friend => (
-      <View key={friend} style={styles.friendChip}>
-        <Text style={styles.friendText}>{friend}</Text>
-      </View>
+    {searching && (
+      <Text style={styles.friendText}>Searching...</Text>
+    )}
+
+    {!!searchError && (
+      <Text style={styles.friendText}>{searchError}</Text>
+    )}
+
+    {!searching &&
+      friendInput.trim() !== '' &&
+      searchResults.length === 0 &&
+      !searchError && (
+        <Text style={styles.friendText}>No registered users found.</Text>
+      )}
+
+    {searchResults
+      .filter(user => !friends.some(friend => friend.id === user.id))
+      .map(user => (
+        <TouchableOpacity
+          key={user.id}
+          style={styles.friendChip}
+          onPress={() => addFriend(user)}
+        >
+          <Text style={styles.friendText}>
+            + {user.name}
+          </Text>
+        </TouchableOpacity>
+      ))}
+
+    {friends.length > 0 && (
+      <Text style={styles.label}>SELECTED FRIENDS</Text>
+    )}
+
+    {friends.map(friend => (
+      <TouchableOpacity
+        key={friend.id}
+        style={styles.friendChip}
+        onPress={() => removeFriend(friend.id)}
+      >
+        <Text style={styles.friendText}>
+          {friend.name}  ×
+        </Text>
+      </TouchableOpacity>
     ))}
 
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={createCapsule}
-      >
-        <Text style={styles.createButtonText}>CREATE CAPSULE</Text>
-      </TouchableOpacity>
+
+
+    <TouchableOpacity
+      style={[
+        styles.createButton,
+        saving && { opacity: 0.5 },
+      ]}
+      onPress={createCapsule}
+      disabled={saving}
+    >
+      <Text style={styles.createButtonText}>
+        {saving ? 'CREATING...' : 'CREATE CAPSULE'}
+      </Text>
+    </TouchableOpacity>
 
       <Modal
         visible={modalVisible}

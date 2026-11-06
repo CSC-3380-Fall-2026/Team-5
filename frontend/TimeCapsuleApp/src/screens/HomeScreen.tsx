@@ -1,4 +1,5 @@
-﻿import React from 'react';
+﻿import React, { useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView,Text, StyleSheet,View, TouchableOpacity} from 'react-native';
 import CapsuleCard from '../components/CapsuleCard';
@@ -9,6 +10,13 @@ import DataState from '../components/DataState';
 // Gets the shared list of capsules created in the app
 function HomeScreen({ navigation }: any) {
   const { capsules, loading, error, reload } = useCapsules();
+
+  // Refresh saved capsules whenever Home opens, including after login.
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
 
   return (
   <SafeAreaView style={styles.safeArea}>

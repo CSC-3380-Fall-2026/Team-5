@@ -60,7 +60,7 @@ async function readFriendResponse(response: Response) {
   }
 }
 
-export default function FriendsListScreen() {
+export default function FriendsListScreen({ navigation }: any) {
   const [people, setPeople] = useState<Person[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -244,6 +244,14 @@ export default function FriendsListScreen() {
         }
         ListHeaderComponent={
           <>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>
+              ← Back
+            </Text>
+          </TouchableOpacity>
             <View style={styles.header}>
               <Text style={styles.brand}>
                 TIME CAPSULE
@@ -746,4 +754,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
+  backButton: {
+  alignSelf: 'flex-start',
+  marginTop: 18,
+  marginBottom: 4,
+},
+
+backButtonText: {
+  color: '#735641',
+  fontSize: 16,
+  fontWeight: '700',
+},
 });

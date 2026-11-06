@@ -4,6 +4,7 @@ const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 const crypto = require("node:crypto");
 const jwt = require("jsonwebtoken");
+const { FRIEND_REQUESTS_SCHEMA, registerFriendRoutes } = require("./friends");
 
 const {
   loadEnvironment,
@@ -22,6 +23,9 @@ app.use(express.json());
 const PORT = Number(process.env.PORT || 3000);
 
 let pool;
+
+// Friend routes share the existing login middleware and MySQL connection pool.
+registerFriendRoutes(app, () => pool, authenticateUser);
 
 // Checks whether the backend and database are connected.
 app.get("/api/health", async (req, res) => {
@@ -501,6 +505,9 @@ async function startServer() {
 
   // Verify MySQL is accessible before starting the API.
   await pool.query("SELECT 1");
+
+  // Add persistent friend requests to existing databases without resetting their data.
+  await pool.query(FRIEND_REQUESTS_SCHEMA);
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`API running on port ${PORT}`);

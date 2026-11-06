@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,7 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Keychain from 'react-native-keychain';
+import { useFocusEffect } from '@react-navigation/native';
+import { getAuthToken } from '../services/authStorage';
 
 import { API_BASE_URL } from '../services/api';
 
@@ -20,6 +21,7 @@ type Person = {
   id: string;
   name: string;
   bio: string | null;
+  relationship: 'none' | 'incoming' | 'outgoing' | 'friends';
 };
 
 const COLORS = {
@@ -43,27 +45,43 @@ function getInitials(name: string): string {
     .join('');
 }
 
+// An older running backend returns an HTML 404 page for the new friend routes.
+async function readFriendResponse(response: Response) {
+  if (response.status === 404) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('The running server does not have the Friends feature. Restart the backend, then tap Try again.');
+    }
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new Error('The server returned an unexpected response. Check that the app is connected to the Time Capsule backend.');
+  }
+}
+
 export default function FriendsListScreen() {
   const [people, setPeople] = useState<Person[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [busyIds, setBusyIds] = useState<string[]>([]);
+  const pendingActions = useRef(new Set<string>());
 
   const loadPeople = useCallback(async () => {
     try {
       setError('');
 
-      const credentials = await Keychain.getGenericPassword();
+      // Use the same keychain service as login so the saved token can be found.
+      const token = await getAuthToken();
 
-      if (!credentials) {
+      if (!token) {
         throw new Error('Please log in again to view people.');
       }
 
-      const token = credentials.password;
-
       const response = await fetch(
-        `${API_BASE_URL}/api/users/discover`,
+        `${API_BASE_URL}/api/friends/users`,
         {
           method: 'GET',
           headers: {
@@ -73,7 +91,7 @@ export default function FriendsListScreen() {
         },
       );
 
-      const data = await response.json();
+      const data = await readFriendResponse(response);
 
       if (!response.ok) {
         throw new Error(data.error || 'Unable to load people.');
@@ -92,9 +110,10 @@ export default function FriendsListScreen() {
     }
   }, []);
 
-  useEffect(() => {
+  // Refresh incoming requests and friendships whenever the directory is reopened.
+  useFocusEffect(useCallback(() => {
     loadPeople();
-  }, [loadPeople]);
+  }, [loadPeople]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -115,6 +134,38 @@ export default function FriendsListScreen() {
     );
   }, [people, search]);
 
+  // Keep failed requests retryable and only update a row after the server confirms it.
+  async function updateFriend(person: Person, action?: 'accept' | 'decline') {
+    if (pendingActions.current.has(person.id)) return;
+    pendingActions.current.add(person.id);
+    setBusyIds(ids => [...ids, person.id]);
+    setError('');
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error('Please log in again to send friend requests.');
+      const response = await fetch(
+        API_BASE_URL + '/api/friends/requests/' + person.id,
+        {
+          method: action ? 'PATCH' : 'POST',
+          headers: {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+          ...(action ? {body: JSON.stringify({action})} : {}),
+        },
+      );
+      const data = await readFriendResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Unable to update friend request.');
+      setPeople(current => current.map(user => user.id === person.id
+        ? {...user, relationship: data.relationship} : user));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update friend request.');
+    } finally {
+      pendingActions.current.delete(person.id);
+      setBusyIds(ids => ids.filter(id => id !== person.id));
+    }
+  }
+
   const renderPerson = ({ item }: { item: Person }) => (
     <View style={styles.personRow}>
       <View style={styles.personAvatar}>
@@ -133,8 +184,40 @@ export default function FriendsListScreen() {
         </Text>
       </View>
 
-      <View style={styles.personArrow}>
-        <Text style={styles.arrowText}>›</Text>
+      {/* Request state comes from MySQL, so it survives refreshes and app restarts. */}
+      <View style={styles.friendActions}>
+        {item.relationship === 'incoming' ? (
+          <>
+            <Text style={styles.personBio}>Wants to be friends</Text>
+            <TouchableOpacity
+              style={styles.requestButton}
+              accessibilityLabel={'Accept request from ' + item.name}
+              disabled={busyIds.includes(item.id)}
+              onPress={() => updateFriend(item, 'accept')}>
+              <Text style={styles.requestText}>Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel={'Decline request from ' + item.name}
+              disabled={busyIds.includes(item.id)}
+              onPress={() => updateFriend(item, 'decline')}>
+              <Text style={styles.retryText}>Decline</Text>
+            </TouchableOpacity>
+          </>
+        ) : item.relationship === 'outgoing' || item.relationship === 'friends' ? (
+          <Text style={styles.personBio}>
+            {item.relationship === 'friends' ? 'Friends' : 'Request sent'}
+          </Text>
+        ) : (
+          <TouchableOpacity
+            style={styles.requestButton}
+            accessibilityLabel={'Send friend request to ' + item.name}
+            disabled={busyIds.includes(item.id)}
+            onPress={() => updateFriend(item)}>
+            <Text style={styles.requestText}>
+              {busyIds.includes(item.id) ? 'Sending...' : 'Add friend'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -245,39 +328,6 @@ export default function FriendsListScreen() {
     People will appear here as they join.
   </Text>
 )}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.circleScroll}
-              >
-                {people.slice(0, 8).map(person => (
-                  <View
-                    key={person.id}
-                    style={styles.circlePerson}
-                  >
-                    <View style={styles.circleAvatarBorder}>
-                      <View style={styles.circleAvatar}>
-                        <Text style={styles.circleInitials}>
-                          {getInitials(person.name)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text
-                      style={styles.circleName}
-                      numberOfLines={1}
-                    >
-                      {person.name.split(' ')[0]}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-            {!loading && people.length === 0 && (
-              <Text style={styles.emptyCircleText}>
-                People will appear here as they join.
-              </Text>
-            )}
-
             <View style={styles.directoryHeading}>
               <Text style={styles.sectionTitle}>
                 Discover People
@@ -359,6 +409,23 @@ export default function FriendsListScreen() {
 }
 
 const styles = StyleSheet.create({
+  friendActions: {
+    alignItems: 'center',
+    marginLeft: 8,
+    gap: 8,
+    maxWidth: 130,
+  },
+  requestButton: {
+    backgroundColor: COLORS.lavender,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  requestText: {
+    color: '#FFF5E8',
+    fontWeight: '700',
+    fontSize: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,

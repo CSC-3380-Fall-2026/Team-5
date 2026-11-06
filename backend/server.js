@@ -23,6 +23,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 let pool;
 
+// Checks whether the backend and database are connected.
 app.get("/api/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -41,8 +42,10 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-/*hashes the password, saves the account in MySQL, and assigns the user role automatically.
-/nobody can make themselves an admin through signup.
+/*
+Hashes the password, saves the account in MySQL, and assigns
+the user role automatically.
+Nobody can make themselves an admin through signup.
 */
 app.post("/api/auth/register", async (req, res) => {
   try {
@@ -121,9 +124,9 @@ app.post("/api/auth/register", async (req, res) => {
 });
 
 /*
-backend user login: find account using email, compare password with hashed password in MySQL, and return a JWT token if successful.
+Logs in an existing user by checking their email and password
+against the account stored in MySQL.
 */
-
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
@@ -186,13 +189,14 @@ app.post("/api/auth/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Login failed:", error);
+
     return res.status(500).json({
       error: "Unable to log in.",
     });
   }
 });
 
-
+// Verifies the JWT token before allowing access to protected routes.
 async function authenticateUser(req, res, next) {
   const authorization = req.headers.authorization;
 
@@ -220,6 +224,7 @@ async function authenticateUser(req, res, next) {
   }
 }
 
+// Retrieves the logged-in user's profile.
 app.get("/api/users/me", authenticateUser, async (req, res) => {
   try {
     const [users] = await pool.execute(
@@ -250,12 +255,14 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
     });
   } catch (error) {
     console.error("Profile lookup failed:", error);
+
     return res.status(500).json({
       error: "Unable to load profile.",
     });
   }
 });
-// Gets registered users for the Friends directory.
+
+// Searches registered users for the Friends directory.
 app.get("/api/users/discover", authenticateUser, async (req, res) => {
   try {
     const search =
@@ -290,10 +297,12 @@ app.get("/api/users/discover", authenticateUser, async (req, res) => {
   }
 });
 
-// Creates a capsule for the logged-in user
+// Creates a capsule and saves selected friends as group members.
 app.post("/api/capsules", authenticateUser, async (req, res) => {
+  let connection;
+
   try {
-    const { title, description, opensAt } = req.body ?? {};
+    const { title, description, opensAt, friendIds = [] } = req.body ?? {};
 
     if (
       typeof title !== "string" ||
@@ -306,24 +315,75 @@ app.post("/api/capsules", authenticateUser, async (req, res) => {
       });
     }
 
+    // Friend IDs must be an array of numeric strings.
+    if (
+      !Array.isArray(friendIds) ||
+      !friendIds.every(
+        (id) => typeof id === "string" && /^\d+$/.test(id)
+      )
+    ) {
+      return res.status(400).json({
+        error: "Invalid friend selection.",
+      });
+    }
+
+    // Remove duplicate IDs and exclude the capsule creator.
+    const uniqueFriendIds = [...new Set(friendIds)].filter(
+      (id) => id !== String(req.userId)
+    );
+
+    // Confirm every selected friend is a registered non-admin user.
+    if (uniqueFriendIds.length > 0) {
+      const placeholders = uniqueFriendIds.map(() => "?").join(", ");
+
+      const [registeredFriends] = await pool.execute(
+        `SELECT id FROM app_users
+         WHERE id IN (${placeholders}) AND role = 'user'`,
+        uniqueFriendIds
+      );
+
+      if (registeredFriends.length !== uniqueFriendIds.length) {
+        return res.status(400).json({
+          error: "One or more selected friends are invalid.",
+        });
+      }
+    }
+
     const capsuleId = crypto.randomInt(1, 2147483647);
     const groupId = crypto.randomInt(1, 2147483647);
 
-    await pool.execute(
+    // Start a transaction so all database changes succeed together.
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Create the capsule group.
+    await connection.execute(
       `INSERT INTO capsule_groups
        (id, name, created_by)
        VALUES (?, ?, ?)`,
       [groupId, title.trim(), req.userId]
     );
 
-    await pool.execute(
+    // Add the capsule creator to the group.
+    await connection.execute(
       `INSERT INTO group_members
        (group_id, user_id)
        VALUES (?, ?)`,
       [groupId, req.userId]
     );
 
-    await pool.execute(
+    // Add selected friends to the group.
+    for (const friendId of uniqueFriendIds) {
+      await connection.execute(
+        `INSERT INTO group_members
+         (group_id, user_id)
+         VALUES (?, ?)`,
+        [groupId, friendId]
+      );
+    }
+
+    // Create the capsule associated with the group.
+    await connection.execute(
       `INSERT INTO capsules
        (id, group_id, created_by, title, description, opens_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -336,6 +396,9 @@ app.post("/api/capsules", authenticateUser, async (req, res) => {
         opensAt,
       ]
     );
+
+    // Save the capsule and all group memberships together.
+    await connection.commit();
 
     return res.status(201).json({
       message: "Capsule created successfully.",
@@ -350,17 +413,26 @@ app.post("/api/capsules", authenticateUser, async (req, res) => {
       },
     });
   } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
     console.error("Capsule creation failed:", error);
 
     return res.status(500).json({
       error: "Unable to create capsule.",
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
-// Loads capsules that the logged-in user belongs to
+// Retrieves capsules and their saved registered members.
 app.get("/api/capsules", authenticateUser, async (req, res) => {
   try {
+    // Get every capsule the logged-in user belongs to.
     const [capsules] = await pool.execute(
       `SELECT
          capsules.id,
@@ -378,8 +450,28 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
       [req.userId]
     );
 
+    // NEW: Load the registered members of each capsule group.
+    const capsuleMembers = await Promise.all(
+      capsules.map(async (capsule) => {
+        const [members] = await pool.execute(
+          `SELECT u.id, u.name
+           FROM group_members gm
+           JOIN app_users u ON gm.user_id = u.id
+           WHERE gm.group_id = ?
+           ORDER BY u.name ASC`,
+          [capsule.group_id]
+        );
+
+        return members.map((member) => ({
+          id: String(member.id),
+          name: member.name,
+        }));
+      })
+    );
+
+    // Include saved members in the response for each capsule.
     return res.json({
-      capsules: capsules.map((capsule) => ({
+      capsules: capsules.map((capsule, index) => ({
         id: String(capsule.id),
         groupId: String(capsule.group_id),
         createdBy: String(capsule.created_by),
@@ -387,6 +479,7 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
         description: capsule.description,
         opensAt: capsule.opens_at,
         createdAt: capsule.created_at,
+        members: capsuleMembers[index],
       })),
     });
   } catch (error) {
@@ -398,6 +491,7 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
   }
 });
 
+// Starts the backend and connects to MySQL.
 async function startServer() {
   pool = mysql.createPool({
     ...dbConfig,
@@ -413,14 +507,15 @@ async function startServer() {
     console.log("MySQL connection successful");
   });
 }
-// Deletes a capsule created by the logged-in user
+
+// Deletes a capsule created by the logged-in user.
 app.delete("/api/capsules/:id", authenticateUser, async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
     const capsuleId = req.params.id;
 
-    // Makes sure the capsule belongs to the logged-in user
+    // Make sure the capsule belongs to the logged-in user.
     const [capsules] = await connection.execute(
       `SELECT id, group_id
        FROM capsules
@@ -439,28 +534,28 @@ app.delete("/api/capsules/:id", authenticateUser, async (req, res) => {
 
     await connection.beginTransaction();
 
-    // Deletes any memories/messages connected to the capsule
+    // Delete any messages connected to the capsule.
     await connection.execute(
       `DELETE FROM messages
        WHERE capsule_id = ?`,
       [capsuleId]
     );
 
-    // Deletes the capsule itself
+    // Delete the capsule.
     await connection.execute(
       `DELETE FROM capsules
        WHERE id = ?`,
       [capsuleId]
     );
 
-    // Removes everyone from the capsule group
+    // Remove the capsule's group memberships.
     await connection.execute(
       `DELETE FROM group_members
        WHERE group_id = ?`,
       [groupId]
     );
 
-    // Deletes the now-unused group
+    // Delete the now-unused group.
     await connection.execute(
       `DELETE FROM capsule_groups
        WHERE id = ?`,

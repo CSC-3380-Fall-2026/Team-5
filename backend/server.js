@@ -265,12 +265,12 @@ app.get("/api/users/discover", authenticateUser, async (req, res) => {
 
     const [users] = await pool.execute(
       `SELECT id, name, bio
-      FROM app_users
-      WHERE id <> ?
-        AND role = 'user'
-        AND name LIKE ?
-      ORDER BY name ASC
-      LIMIT 100`,
+       FROM app_users
+       WHERE id <> ?
+         AND role = 'user'
+         AND name LIKE ?
+       ORDER BY name ASC
+       LIMIT 100`,
       [req.userId, `%${search}%`]
     );
 
@@ -290,6 +290,114 @@ app.get("/api/users/discover", authenticateUser, async (req, res) => {
   }
 });
 
+// Creates a capsule for the logged-in user
+app.post("/api/capsules", authenticateUser, async (req, res) => {
+  try {
+    const { title, description, opensAt } = req.body ?? {};
+
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      typeof opensAt !== "string" ||
+      !opensAt.trim()
+    ) {
+      return res.status(400).json({
+        error: "Capsule title and unlock date are required.",
+      });
+    }
+
+    const capsuleId = crypto.randomInt(1, 2147483647);
+    const groupId = crypto.randomInt(1, 2147483647);
+
+    await pool.execute(
+      `INSERT INTO capsule_groups
+       (id, name, created_by)
+       VALUES (?, ?, ?)`,
+      [groupId, title.trim(), req.userId]
+    );
+
+    await pool.execute(
+      `INSERT INTO group_members
+       (group_id, user_id)
+       VALUES (?, ?)`,
+      [groupId, req.userId]
+    );
+
+    await pool.execute(
+      `INSERT INTO capsules
+       (id, group_id, created_by, title, description, opens_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        capsuleId,
+        groupId,
+        req.userId,
+        title.trim(),
+        typeof description === "string" ? description.trim() : null,
+        opensAt,
+      ]
+    );
+
+    return res.status(201).json({
+      message: "Capsule created successfully.",
+      capsule: {
+        id: String(capsuleId),
+        groupId: String(groupId),
+        createdBy: String(req.userId),
+        title: title.trim(),
+        description:
+          typeof description === "string" ? description.trim() : null,
+        opensAt,
+      },
+    });
+  } catch (error) {
+    console.error("Capsule creation failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to create capsule.",
+    });
+  }
+});
+
+// Loads capsules that the logged-in user belongs to
+app.get("/api/capsules", authenticateUser, async (req, res) => {
+  try {
+    const [capsules] = await pool.execute(
+      `SELECT
+         capsules.id,
+         capsules.group_id,
+         capsules.created_by,
+         capsules.title,
+         capsules.description,
+         capsules.opens_at,
+         capsules.created_at
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE group_members.user_id = ?
+       ORDER BY capsules.created_at DESC`,
+      [req.userId]
+    );
+
+    return res.json({
+      capsules: capsules.map((capsule) => ({
+        id: String(capsule.id),
+        groupId: String(capsule.group_id),
+        createdBy: String(capsule.created_by),
+        title: capsule.title,
+        description: capsule.description,
+        opensAt: capsule.opens_at,
+        createdAt: capsule.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("Capsule lookup failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to load capsules.",
+    });
+  }
+});
+
 async function startServer() {
   pool = mysql.createPool({
     ...dbConfig,
@@ -305,6 +413,77 @@ async function startServer() {
     console.log("MySQL connection successful");
   });
 }
+// Deletes a capsule created by the logged-in user
+app.delete("/api/capsules/:id", authenticateUser, async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const capsuleId = req.params.id;
+
+    // Makes sure the capsule belongs to the logged-in user
+    const [capsules] = await connection.execute(
+      `SELECT id, group_id
+       FROM capsules
+       WHERE id = ? AND created_by = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have permission to delete it.",
+      });
+    }
+
+    const groupId = capsules[0].group_id;
+
+    await connection.beginTransaction();
+
+    // Deletes any memories/messages connected to the capsule
+    await connection.execute(
+      `DELETE FROM messages
+       WHERE capsule_id = ?`,
+      [capsuleId]
+    );
+
+    // Deletes the capsule itself
+    await connection.execute(
+      `DELETE FROM capsules
+       WHERE id = ?`,
+      [capsuleId]
+    );
+
+    // Removes everyone from the capsule group
+    await connection.execute(
+      `DELETE FROM group_members
+       WHERE group_id = ?`,
+      [groupId]
+    );
+
+    // Deletes the now-unused group
+    await connection.execute(
+      `DELETE FROM capsule_groups
+       WHERE id = ?`,
+      [groupId]
+    );
+
+    await connection.commit();
+
+    return res.json({
+      message: "Capsule deleted successfully.",
+    });
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("Capsule deletion failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to delete capsule.",
+    });
+  } finally {
+    connection.release();
+  }
+});
 
 startServer().catch((error) => {
   console.error("Failed to start API:", error.message);

@@ -1,0 +1,112 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice Johnson",
+      "email": "alice.seed@example.test",
+      "bio": "Saving memories for the future."
+    },
+    {
+      "id": 2,
+      "name": "Bob Smith",
+      "email": "bob.seed@example.test",
+      "bio": "Making memories with friends."
+    },
+    {
+      "id": 3,
+      "name": "Charlie Davis",
+      "email": "charlie.seed@example.test",
+      "bio": "Looking forward to opening our capsules."
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Junior Year",
+      "createdBy": 1
+    },
+    {
+      "id": 2,
+      "name": "Summer Adventures",
+      "createdBy": 2
+    }
+  ],
+  "memberships": [
+    {
+      "groupId": 1,
+      "userId": 1
+    },
+    {
+      "groupId": 1,
+      "userId": 2
+    },
+    {
+      "groupId": 1,
+      "userId": 3
+    },
+    {
+      "groupId": 2,
+      "userId": 2
+    },
+    {
+      "groupId": 2,
+      "userId": 3
+    }
+  ],
+  "capsules": [
+    {
+      "id": 1,
+      "groupId": 1,
+      "createdBy": 1,
+      "title": "Junior Year Memories",
+      "description": "Photos and notes from junior year.",
+      "opensAt": "2030-06-01T12:00:00"
+    },
+    {
+      "id": 2,
+      "groupId": 2,
+      "createdBy": 2,
+      "title": "Summer Adventures",
+      "description": "Our favorite summer moments.",
+      "opensAt": "2030-09-01T12:00:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": 1,
+      "capsuleId": 1,
+      "userId": 1,
+      "content": "Remember our first day back at school!"
+    },
+    {
+      "id": 2,
+      "capsuleId": 1,
+      "userId": 2,
+      "content": "We need to save our homecoming photos."
+    },
+    {
+      "id": 3,
+      "capsuleId": 1,
+      "userId": 3,
+      "content": "Can't wait to look back at these memories."
+    },
+    {
+      "id": 4,
+      "capsuleId": 2,
+      "userId": 2,
+      "content": "Our beach trip was unforgettable."
+    },
+    {
+      "id": 5,
+      "capsuleId": 2,
+      "userId": 3,
+      "content": "Save this note for the end of summer."
+    },
+    {
+      "id": 6,
+      "capsuleId": 2,
+      "userId": 2,
+      "content": "Let's do another trip next year."
+    }
+  ]
+}

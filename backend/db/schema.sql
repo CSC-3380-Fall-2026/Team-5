@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS messages (
     capsule_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     content TEXT NOT NULL,
+    photo_data LONGTEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (capsule_id) REFERENCES capsules(id),
     FOREIGN KEY (user_id) REFERENCES app_users(id)

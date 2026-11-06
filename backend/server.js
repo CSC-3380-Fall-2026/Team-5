@@ -398,6 +398,121 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
   }
 });
 
+// Adds a memory to a capsule
+app.post("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
+  try {
+    const capsuleId = req.params.id;
+    const { content, photoData } = req.body ?? {};
+
+    if (typeof content !== "string" || !content.trim()) {
+      return res.status(400).json({
+        error: "Memory text is required.",
+      });
+    }
+
+    // Makes sure the logged-in user belongs to this capsule
+    const [capsules] = await pool.execute(
+      `SELECT capsules.id
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE capsules.id = ?
+         AND group_members.user_id = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have access to it.",
+      });
+    }
+
+    const memoryId = crypto.randomInt(1, 2147483647);
+
+    await pool.execute(
+      `INSERT INTO messages
+      (id, capsule_id, user_id, content, photo_data)
+      VALUES (?, ?, ?, ?, ?)`,
+      [
+        memoryId,
+        capsuleId,
+        req.userId,
+        content.trim(),
+        typeof photoData === "string" ? photoData : null,
+      ]
+    );
+
+    return res.status(201).json({
+      message: "Memory added successfully.",
+      memory: {
+        id: String(memoryId),
+        capsuleId: String(capsuleId),
+        userId: String(req.userId),
+        content: content.trim(),
+        photoData:
+          typeof photoData === "string" ? photoData : null,
+      },
+    });
+  } catch (error) {
+    console.error("Memory creation failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to add memory.",
+    });
+  }
+});
+
+// Loads memories for a capsule
+app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
+  try {
+    const capsuleId = req.params.id;
+
+    // Makes sure the logged-in user belongs to this capsule
+    const [capsules] = await pool.execute(
+      `SELECT capsules.id
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE capsules.id = ?
+         AND group_members.user_id = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have access to it.",
+      });
+    }
+
+    const [memories] = await pool.execute(
+      `SELECT id, capsule_id, user_id, content, photo_data, created_at
+      FROM messages
+      WHERE capsule_id = ?
+      ORDER BY created_at ASC`,
+      [capsuleId]
+    );
+
+    return res.json({
+      memories: memories.map((memory) => ({
+        id: String(memory.id),
+        capsuleId: String(memory.capsule_id),
+        userId: String(memory.user_id),
+        content: memory.content,
+        photoData: memory.photo_data,
+        createdAt: memory.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("Memory lookup failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to load memories.",
+    });
+  }
+});
+
 async function startServer() {
   pool = mysql.createPool({
     ...dbConfig,

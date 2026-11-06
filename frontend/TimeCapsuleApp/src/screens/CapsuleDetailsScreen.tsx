@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,17 +15,75 @@ import { API_BASE_URL } from '../services/api';
 import { getAuthToken } from '../services/authStorage';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
-import { useCapsules } from '../context/CapsuleContext';
+import {
+  Capsule,
+  useCapsules,
+} from '../context/CapsuleContext';
 
 function CapsuleDetailsScreen({ route, navigation }: any) {
   const { capsule: routeCapsule } = route.params;
-  const { capsules } = useCapsules();
-
+  const { capsules, addMemory } = useCapsules();
+  
   // Gets the newest version of the capsule from context
-  const capsule =
-    capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
+  const capsule: Capsule =
+  capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
 
-  const memories = capsule.memories ?? [];
+const memories = useMemo(
+  () => capsule.memories ?? [],
+  [capsule.memories],
+);
+
+  useEffect(() => {
+  async function loadMemories() {
+    try {
+      const token = await getAuthToken();
+
+      if (!token) {
+        return;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/capsules/${capsule.id}/memories`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          'Unable to load memories:',
+          data.error,
+        );
+        return;
+      }
+
+      data.memories.forEach((memory: any) => {
+        const alreadyExists = memories.some(
+          existingMemory => existingMemory.id === memory.id,
+        );
+
+        if (!alreadyExists) {
+          addMemory(capsule.id, {
+            id: memory.id,
+            text: memory.content,
+            photoUri: memory.photoData ?? '',
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Memory loading error:', error);
+    }
+  }
+
+  loadMemories().catch(error => {
+    console.error('Memory loading error:', error);
+  });
+}, [capsule.id, addMemory, memories]);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -89,7 +147,6 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
 
   // Controls what is shown in the memories section
   function renderMemories() {
-    // Locked capsules only show how many memories were added
     if (!isUnlocked) {
       return (
         <Text style={styles.value}>
@@ -98,7 +155,6 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
       );
     }
 
-    // Unlocked capsule with no memories
     if (memories.length === 0) {
       return (
         <Text style={styles.value}>
@@ -107,25 +163,20 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
       );
     }
 
-    // Unlocked capsule displays the saved memories and photos
-    return memories.map(
-      (memory: {
-        id: string;
-        text: string;
-        photoUri: string;
-      }) => (
-        <View key={memory.id} style={styles.memory}>
-          <Text style={styles.memoryText}>
-            {memory.text}
-          </Text>
+    return memories.map(memory => (
+      <View key={memory.id} style={styles.memory}>
+        <Text style={styles.memoryText}>
+          {memory.text}
+        </Text>
 
+        {memory.photoUri ? (
           <Image
             source={{ uri: memory.photoUri }}
             style={styles.memoryPhoto}
           />
-        </View>
-      ),
-    );
+        ) : null}
+      </View>
+    ));
   }
 
   return (

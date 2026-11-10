@@ -1,15 +1,30 @@
 import React, { useState } from 'react';
-import {View, Text, TextInput, StyleSheet, Image, ScrollView, TouchableOpacity,} from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { validateMemory, hasErrors, MemoryErrors } from '../utils/memoryValidation';
-
+import {
+  validateMemory,
+  hasErrors,
+  MemoryErrors,
+} from '../utils/memoryValidation';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
 import { useCapsules } from '../context/CapsuleContext';
 
 function AddMemoryScreen({ route, navigation }: any) {
   const [memoryText, setMemoryText] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoData, setPhotoData] = useState<string | null>(null);
   const [errors, setErrors] = useState<MemoryErrors>({});
+
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
 
@@ -17,35 +32,91 @@ function AddMemoryScreen({ route, navigation }: any) {
   async function choosePhoto() {
     const result = await launchImageLibrary({
       mediaType: 'photo',
+      includeBase64: true,
     });
 
     const selectedPhoto = result.assets?.[0];
 
     if (selectedPhoto?.uri) {
       setPhotoUri(selectedPhoto.uri);
+
+      if (selectedPhoto.base64) {
+        const imageType = selectedPhoto.type ?? 'image/jpeg';
+
+        setPhotoData(
+          `data:${imageType};base64,${selectedPhoto.base64}`,
+        );
+      }
+
       // A photo was chosen, so clear the photo error
-      setErrors(current => ({ ...current, photo: undefined }));
+      setErrors(current => ({
+        ...current,
+        photo: undefined,
+      }));
     }
   }
 
   // Saves the new memory to the selected capsule
-  function handleAddMemory() {
+  async function handleAddMemory() {
     // Check the form first; stop and show messages if something is missing
-    const validationErrors = validateMemory(memoryText, photoUri);
+    const validationErrors = validateMemory(
+      memoryText,
+      photoUri,
+    );
+
     setErrors(validationErrors);
+
     if (hasErrors(validationErrors)) {
       return;
     }
 
-    const newMemory = {
-      id: Date.now().toString(),
-      text: memoryText.trim(),
-      photoUri: photoUri ?? '',
-    };
+    try {
+      const token = await getAuthToken();
 
-    addMemory(capsule.id, newMemory);
+      if (!token) {
+        return;
+      }
 
-    navigation.goBack();
+      const response = await fetch(
+        `${API_BASE_URL}/api/capsules/${capsule.id}/memories`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            content: memoryText.trim(),
+            photoData,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          'Unable to save memory:',
+          data.error,
+        );
+        return;
+      }
+
+      const newMemory = {
+        id: data.memory.id,
+        text: data.memory.content,
+        photoUri: photoData ?? photoUri ?? '',
+      };
+
+      addMemory(capsule.id, newMemory);
+
+      navigation.goBack();
+    } catch (error) {
+      console.error(
+        'Memory creation error:',
+        error,
+      );
+    }
   }
 
   return (
@@ -56,12 +127,16 @@ function AddMemoryScreen({ route, navigation }: any) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>
+            ← Back
+          </Text>
         </TouchableOpacity>
 
         {/* Page heading */}
         <View style={styles.header}>
-          <Text style={styles.title}>ADD MEMORY</Text>
+          <Text style={styles.title}>
+            ADD MEMORY
+          </Text>
 
           <Text style={styles.subtitle}>
             Adding to: {capsule.name}
@@ -69,26 +144,41 @@ function AddMemoryScreen({ route, navigation }: any) {
         </View>
 
         {/* Memory text */}
-        <Text style={styles.label}>MEMORY</Text>
+        <Text style={styles.label}>
+          MEMORY
+        </Text>
 
         <TextInput
-          style={[styles.input, errors.text ? styles.inputError : null]}
+          style={[
+            styles.input,
+            errors.text ? styles.inputError : null,
+          ]}
           placeholder="Write a memory..."
           placeholderTextColor="#9A8A7A"
           value={memoryText}
           onChangeText={value => {
             setMemoryText(value);
-            // The user is typing, so clear the text error
+
             if (errors.text) {
-              setErrors(current => ({ ...current, text: undefined }));
+              setErrors(current => ({
+                ...current,
+                text: undefined,
+              }));
             }
           }}
           multiline
         />
-        {errors.text ? <Text style={styles.error}>{errors.text}</Text> : null}
+
+        {errors.text ? (
+          <Text style={styles.error}>
+            {errors.text}
+          </Text>
+        ) : null}
 
         {/* Photo selection */}
-        <Text style={styles.label}>PHOTO</Text>
+        <Text style={styles.label}>
+          PHOTO
+        </Text>
 
         <TouchableOpacity
           style={styles.photoButton}
@@ -98,7 +188,12 @@ function AddMemoryScreen({ route, navigation }: any) {
             CHOOSE PHOTO
           </Text>
         </TouchableOpacity>
-        {errors.photo ? <Text style={styles.error}>{errors.photo}</Text> : null}
+
+        {errors.photo ? (
+          <Text style={styles.error}>
+            {errors.photo}
+          </Text>
+        ) : null}
 
         {/* Selected photo preview */}
         {photoUri ? (

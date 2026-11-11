@@ -27,7 +27,10 @@ function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
           <LockedCapsuleView
             name={capsule.name}
             unlockDate={capsule.unlockDate}
-            memoryCount={capsule.memories?.length ?? 0}
+            memoryCount={
+              capsule.memoryCount ?? capsule.memories?.length ?? 0
+            
+          }
           />
         ) : (
           <>

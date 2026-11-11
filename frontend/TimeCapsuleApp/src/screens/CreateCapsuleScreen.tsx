@@ -133,8 +133,9 @@ function removeFriend(userId: string) {
 }
 
 
-// Validates the form, creates a capsule, and saves it
-  async function createCapsule() {
+
+  // Makes sure all required capsule fields are filled in
+async function createCapsule() {
   // Makes sure all required capsule fields are filled in
   if (
     capsuleName.trim() === '' ||
@@ -144,6 +145,23 @@ function removeFriend(userId: string) {
   ) {
     setModalTitle('Missing Information');
     setModalMessage('Please complete all required fields.');
+    setModalVisible(true);
+    return;
+  }
+
+  // Makes sure the unlock date is after today
+  const selectedDate = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+  );
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (selectedDate <= today) {
+    setModalTitle('Invalid Unlock Date');
+    setModalMessage('Unlock date must be after today.');
     setModalVisible(true);
     return;
   }

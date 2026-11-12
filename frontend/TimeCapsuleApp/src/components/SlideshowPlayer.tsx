@@ -65,7 +65,10 @@ useEffect(() => {
   };
 
   const slide = slides[index];
-  const textStyle = { color: template.textColor };
+  const textStyle = {
+    color: template.textColor,
+    fontFamily: template.fontFamily,
+  };
   const finished = !playing && index >= slides.length - 1;
   const musicSources: Record<string, { uri: string }> = {
   wedding: { uri: 'wedding_music' },

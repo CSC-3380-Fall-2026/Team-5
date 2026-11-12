@@ -7,6 +7,7 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -24,16 +25,20 @@ function AddMemoryScreen({ route, navigation }: any) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoData, setPhotoData] = useState<string | null>(null);
   const [errors, setErrors] = useState<MemoryErrors>({});
+  const [uploading, setUploading] = useState(false);
 
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
 
   // Opens the phone's photo library
   async function choosePhoto() {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      includeBase64: true,
-    });
+  const result = await launchImageLibrary({
+    mediaType: 'photo',
+    includeBase64: true,
+    maxWidth: 1200,
+    maxHeight: 1200,
+    quality: 0.7,
+  });
 
     const selectedPhoto = result.assets?.[0];
 
@@ -69,6 +74,7 @@ function AddMemoryScreen({ route, navigation }: any) {
     if (hasErrors(validationErrors)) {
       return;
     }
+    setUploading(true);
 
     try {
       const token = await getAuthToken();
@@ -116,6 +122,8 @@ function AddMemoryScreen({ route, navigation }: any) {
         'Memory creation error:',
         error,
       );
+    } finally {
+    setUploading(false);
     }
   }
 
@@ -209,13 +217,30 @@ function AddMemoryScreen({ route, navigation }: any) {
 
         {/* Save memory */}
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleAddMemory}
-        >
-          <Text style={styles.addButtonText}>
-            ADD MEMORY
-          </Text>
-        </TouchableOpacity>
+  style={[
+    styles.addButton,
+    uploading ? styles.addButtonDisabled : null,
+  ]}
+  onPress={handleAddMemory}
+  disabled={uploading}
+>
+  {uploading ? (
+    <View style={styles.uploadingRow}>
+      <ActivityIndicator
+        size="small"
+        color="#FFFFFF"
+      />
+
+      <Text style={styles.addButtonText}>
+        UPLOADING MEMORY...
+      </Text>
+    </View>
+  ) : (
+    <Text style={styles.addButtonText}>
+      ADD MEMORY
+    </Text>
+  )}
+</TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -355,6 +380,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  addButtonDisabled: {
+    opacity: 0.6,
+  },
+  uploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
 });
 

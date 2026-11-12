@@ -75,11 +75,15 @@ const memories = useMemo(
       // so another effect run cannot add it again
       loadedMemoryIds.current.add(memory.id);
 
-      addMemory(capsule.id, {
+      addMemory(
+      capsule.id,
+      {
         id: memory.id,
         text: memory.content,
         photoUri: memory.photoData ?? '',
-      });
+      },
+      false,
+    );
     }
   });
 

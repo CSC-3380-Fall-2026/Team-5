@@ -1,26 +1,166 @@
-import React from 'react';
-import {View,Text,StyleSheet,Image,ScrollView,TouchableOpacity,} from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+    Modal as ReactNativeModal,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { isCapsuleLocked } from '../utils/capsuleLock';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
+import Modal from '../components/Modal';
 import Card from '../components/Card';
+import {
+  Capsule,
+  useCapsules,
+} from '../context/CapsuleContext';
 
 function CapsuleDetailsScreen({ route, navigation }: any) {
-  const { capsule } = route.params;
-  const memories = capsule.memories ?? [];
+  const { capsule: routeCapsule } = route.params;
+  const { capsules, addMemory } = useCapsules();
+  const loadedMemoryIds = useRef<Set<string>>(new Set());
+  
+  // Gets the newest version of the capsule from context
+  const capsule: Capsule =
+  capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
 
-  // Converts the saved unlock date into a Date object
-  const [month, day, year] = capsule.unlockDate
-    .split('/')
-    .map(Number);
+const memories = useMemo(
+  () => capsule.memories ?? [],
+  [capsule.memories],
+);
 
-  const unlockDate = new Date(year, month - 1, day);
+  useEffect(() => {
+  async function loadMemories() {
+    try {
+      const token = await getAuthToken();
 
-  // Checks whether the capsule has reached its unlock date
-  const isUnlocked = new Date() >= unlockDate;
+      if (!token) {
+        return;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/capsules/${capsule.id}/memories`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          'Unable to load memories:',
+          data.error,
+        );
+        return;
+      }
+
+      data.memories.forEach((memory: any) => {
+    const alreadyExists =
+      memories.some(
+        existingMemory => existingMemory.id === memory.id,
+      ) ||
+      loadedMemoryIds.current.has(memory.id);
+
+    if (!alreadyExists) {
+      // Mark it as loaded before updating state
+      // so another effect run cannot add it again
+      loadedMemoryIds.current.add(memory.id);
+
+      addMemory(
+      capsule.id,
+      {
+        id: memory.id,
+        text: memory.content,
+        photoUri: memory.photoData ?? '',
+      },
+      false,
+    );
+    }
+  });
+
+    } catch (error) {
+      console.error('Memory loading error:', error);
+    }
+  }
+
+  loadMemories().catch(error => {
+    console.error('Memory loading error:', error);
+  });
+}, [capsule.id, addMemory, memories]);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [deleteAfterClose, setDeleteAfterClose] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [forceUnlocked, setForceUnlocked] = useState(false);
+
+  // Uses the shared capsule 
+  // lock helper so every screen follows the same unlock rules
+  const isUnlocked =
+  forceUnlocked || !isCapsuleLocked(capsule.unlockDate);
+
+  // Deletes this capsule from the backend
+  async function deleteCapsule() {
+    try {
+      const token = await getAuthToken();
+
+      if (!token) {
+        setModalTitle('Login Required');
+        setModalMessage(
+          'Please log in again before deleting this capsule.',
+        );
+        setModalVisible(true);
+        return;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/capsules/${capsule.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setModalTitle('Delete Failed');
+        setModalMessage(
+          data.error || 'Unable to delete capsule.',
+        );
+        setModalVisible(true);
+        return;
+      }
+
+      setModalTitle('Capsule Deleted');
+      setModalMessage('This capsule has been deleted.');
+      setDeleteAfterClose(true);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('Capsule deletion error:', error);
+
+      setModalTitle('Connection Error');
+      setModalMessage(
+        'Could not connect to the Time Capsule server.',
+      );
+      setModalVisible(true);
+    }
+  }
 
   // Controls what is shown in the memories section
   function renderMemories() {
-    // Locked capsules only show how many memories were added
     if (!isUnlocked) {
       return (
         <Text style={styles.value}>
@@ -29,7 +169,6 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
       );
     }
 
-    // Unlocked capsule with no memories
     if (memories.length === 0) {
       return (
         <Text style={styles.value}>
@@ -38,25 +177,20 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
       );
     }
 
-    // Unlocked capsule displays the saved memories and photos
-    return memories.map(
-      (memory: {
-        id: string;
-        text: string;
-        photoUri: string;
-      }) => (
-        <View key={memory.id} style={styles.memory}>
-          <Text style={styles.memoryText}>
-            {memory.text}
-          </Text>
+    return memories.map(memory => (
+      <View key={memory.id} style={styles.memory}>
+        <Text style={styles.memoryText}>
+          {memory.text}
+        </Text>
 
+        {memory.photoUri ? (
           <Image
             source={{ uri: memory.photoUri }}
             style={styles.memoryPhoto}
           />
-        </View>
-      ),
-    );
+        ) : null}
+      </View>
+    ));
   }
 
   return (
@@ -156,21 +290,137 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
 
             {renderMemories()}
           </View>
+          
 
           {/* Opens Add Memory */}
+          {!isUnlocked && (
+            <TouchableOpacity
+              style={styles.addMemoryButton}
+              onPress={() =>
+                navigation.navigate('AddMemory', {
+                  capsule,
+                })
+              }
+            >
+              <Text style={styles.addMemoryButtonText}>
+                ADD MEMORY
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Deletes the capsule */}
           <TouchableOpacity
-            style={styles.addMemoryButton}
-            onPress={() =>
-              navigation.navigate('AddMemory', {
-                capsule,
-              })
-            }
+            style={styles.deleteButton}
+            onPress={() => setDeleteConfirmVisible(true)}
           >
-            <Text style={styles.addMemoryButtonText}>
-              ADD MEMORY
+            <Text style={styles.deleteButtonText}>
+              DELETE CAPSULE
             </Text>
           </TouchableOpacity>
+          {!isUnlocked && (
+      <TouchableOpacity
+        style={styles.testUnlockLink}
+        onPress={async () => {
+          try {
+            const token = await getAuthToken();
+
+            if (!token) {
+              return;
+            }
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/capsules/${capsule.id}/unlock-now`,
+              {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              console.error(
+                'Unable to unlock capsule:',
+                data.error,
+              );
+              return;
+            }
+
+            setForceUnlocked(true);
+          } catch (error) {
+            console.error(
+              'Unlock capsule error:',
+              error,
+            );
+          }
+        }}
+      >
+    <Text style={styles.testUnlockLinkText}>
+      Unlock now for testing
+    </Text>
+  </TouchableOpacity>
+)}
         </Card>
+
+        <Modal
+          visible={modalVisible}
+          title={modalTitle}
+          onClose={() => {
+            setModalVisible(false);
+
+            if (deleteAfterClose) {
+              setDeleteAfterClose(false);
+              navigation.navigate('MyCapsules');
+            }
+          }}
+        >
+          <Text style={styles.modalMessage}>
+            {modalMessage}
+          </Text>
+        </Modal>
+        <ReactNativeModal
+  visible={deleteConfirmVisible}
+  transparent={true}
+  animationType="fade"
+  onRequestClose={() => setDeleteConfirmVisible(false)}
+>
+  <View style={styles.confirmOverlay}>
+    <View style={styles.confirmBox}>
+      <Text style={styles.confirmTitle}>
+        Delete Capsule
+      </Text>
+
+      <Text style={styles.confirmMessage}>
+        Are you sure you want to delete this capsule?
+      </Text>
+
+      <View style={styles.confirmButtons}>
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={() => setDeleteConfirmVisible(false)}
+        >
+          <Text style={styles.cancelButtonText}>
+            CANCEL
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.confirmDeleteButton}
+          onPress={() => {
+            setDeleteConfirmVisible(false);
+            deleteCapsule();
+          }}
+        >
+          <Text style={styles.confirmDeleteButtonText}>
+            DELETE
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</ReactNativeModal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -302,6 +552,128 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
+
+  // Delete capsule button
+  deleteButton: {
+    height: 54,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#A66A5A',
+    backgroundColor: '#FFF9F0',
+  },
+
+  deleteButtonText: {
+    color: '#A64B3C',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+
+  modalMessage: {
+    fontSize: 15,
+    color: '#806A58',
+    lineHeight: 22,
+  },
+  confirmOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(61, 48, 40, 0.45)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 24,
+},
+
+confirmBox: {
+  width: '85%',
+  backgroundColor: '#F8F0E3',
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  padding: 24,
+},
+
+confirmTitle: {
+  fontSize: 22,
+  fontWeight: '800',
+  color: '#50382B',
+  marginBottom: 12,
+  textAlign: 'center',
+},
+
+confirmMessage: {
+  fontSize: 15,
+  color: '#806A58',
+  lineHeight: 22,
+  textAlign: 'center',
+  marginBottom: 22,
+},
+
+confirmButtons: {
+  flexDirection: 'row',
+  gap: 12,
+},
+
+cancelButton: {
+  flex: 1,
+  height: 48,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#FFF9F0',
+},
+
+cancelButtonText: {
+  color: '#735641',
+  fontSize: 14,
+  fontWeight: '800',
+},
+
+confirmDeleteButton: {
+  flex: 1,
+  height: 48,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#A64B3C',
+},
+
+confirmDeleteButtonText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: '800',
+},
+testUnlockButton: {
+  height: 48,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  backgroundColor: '#FFF9F0',
+},
+
+testUnlockButtonText: {
+  color: '#735641',
+  fontSize: 14,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
+testUnlockLink: {
+  alignSelf: 'center',
+  marginTop: 10,
+  paddingVertical: 4,
+},
+
+testUnlockLinkText: {
+  color: '#806A58',
+  fontSize: 12,
+  textDecorationLine: 'underline',
+},
 });
 
 export default CapsuleDetailsScreen;

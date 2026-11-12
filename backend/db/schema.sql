@@ -12,6 +12,20 @@ CREATE TABLE IF NOT EXISTS app_users (
     role ENUM('user', 'admin') NOT NULL DEFAULT 'user'
 );
 
+-- Store one request or accepted friendship per pair of users.
+CREATE TABLE IF NOT EXISTS friend_requests (
+    user_low BIGINT NOT NULL,
+    user_high BIGINT NOT NULL,
+    sender_id BIGINT NOT NULL,
+    status ENUM('pending', 'accepted', 'declined') NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_low, user_high),
+    FOREIGN KEY (user_low) REFERENCES app_users(id),
+    FOREIGN KEY (user_high) REFERENCES app_users(id),
+    FOREIGN KEY (sender_id) REFERENCES app_users(id)
+);
+
 CREATE TABLE IF NOT EXISTS capsule_groups (
     id BIGINT PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
@@ -44,6 +58,7 @@ CREATE TABLE IF NOT EXISTS messages (
     capsule_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     content TEXT NOT NULL,
+    photo_data LONGTEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (capsule_id) REFERENCES capsules(id),
     FOREIGN KEY (user_id) REFERENCES app_users(id)

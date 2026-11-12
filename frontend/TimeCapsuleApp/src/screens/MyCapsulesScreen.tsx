@@ -1,18 +1,27 @@
-﻿import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-
+﻿import { View, Text, StyleSheet, TouchableOpacity, ScrollView,  } from 'react-native';
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
 import DataState from '../components/DataState';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 
 
 function MyCapsulesScreen({ navigation }: any) {
   // Gets the shared list of capsules created in the app
   const { capsules, loading, error, reload } = useCapsules();
 
+  // Use the shared loader on each visit so saved friends, loading, and errors stay consistent.
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>            <TouchableOpacity
+      <ScrollView style={styles.container}>
+        <TouchableOpacity
         style={styles.backButton}
         onPress={() => navigation.goBack()}
       >

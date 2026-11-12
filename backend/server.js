@@ -4,6 +4,7 @@ const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 const crypto = require("node:crypto");
 const jwt = require("jsonwebtoken");
+const { FRIEND_REQUESTS_SCHEMA, registerFriendRoutes } = require("./friends");
 
 const {
   loadEnvironment,
@@ -17,12 +18,16 @@ const dbConfig = getDatabaseConfig();
 validateDatabaseConfig(dbConfig);
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 const PORT = Number(process.env.PORT || 3000);
 
 let pool;
 
+// Friend routes share the existing login middleware and MySQL connection pool.
+registerFriendRoutes(app, () => pool, authenticateUser);
+
+// Checks whether the backend and database are connected.
 app.get("/api/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -41,8 +46,10 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-/*hashes the password, saves the account in MySQL, and assigns the user role automatically.
-/nobody can make themselves an admin through signup.
+/*
+Hashes the password, saves the account in MySQL, and assigns
+the user role automatically.
+Nobody can make themselves an admin through signup.
 */
 app.post("/api/auth/register", async (req, res) => {
   try {
@@ -121,9 +128,9 @@ app.post("/api/auth/register", async (req, res) => {
 });
 
 /*
-backend user login: find account using email, compare password with hashed password in MySQL, and return a JWT token if successful.
+Logs in an existing user by checking their email and password
+against the account stored in MySQL.
 */
-
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
@@ -186,13 +193,14 @@ app.post("/api/auth/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Login failed:", error);
+
     return res.status(500).json({
       error: "Unable to log in.",
     });
   }
 });
 
-
+// Verifies the JWT token before allowing access to protected routes.
 async function authenticateUser(req, res, next) {
   const authorization = req.headers.authorization;
 
@@ -220,6 +228,7 @@ async function authenticateUser(req, res, next) {
   }
 }
 
+// Retrieves the logged-in user's profile.
 app.get("/api/users/me", authenticateUser, async (req, res) => {
   try {
     const [users] = await pool.execute(
@@ -250,12 +259,14 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
     });
   } catch (error) {
     console.error("Profile lookup failed:", error);
+
     return res.status(500).json({
       error: "Unable to load profile.",
     });
   }
 });
-// Gets registered users for the Friends directory.
+
+// Searches registered users for the Friends directory.
 app.get("/api/users/discover", authenticateUser, async (req, res) => {
   try {
     const search =
@@ -265,12 +276,12 @@ app.get("/api/users/discover", authenticateUser, async (req, res) => {
 
     const [users] = await pool.execute(
       `SELECT id, name, bio
-      FROM app_users
-      WHERE id <> ?
-        AND role = 'user'
-        AND name LIKE ?
-      ORDER BY name ASC
-      LIMIT 100`,
+       FROM app_users
+       WHERE id <> ?
+         AND role = 'user'
+         AND name LIKE ?
+       ORDER BY name ASC
+       LIMIT 100`,
       [req.userId, `%${search}%`]
     );
 
@@ -290,6 +301,367 @@ app.get("/api/users/discover", authenticateUser, async (req, res) => {
   }
 });
 
+// Creates a capsule and saves selected friends as group members.
+app.post("/api/capsules", authenticateUser, async (req, res) => {
+  let connection;
+
+  try {
+    const { title, description, opensAt, friendIds = [] } = req.body ?? {};
+
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      typeof opensAt !== "string" ||
+      !opensAt.trim()
+    ) {
+      return res.status(400).json({
+        error: "Capsule title and unlock date are required.",
+      });
+    }
+
+    // Friend IDs must be an array of numeric strings.
+    if (
+      !Array.isArray(friendIds) ||
+      !friendIds.every(
+        (id) => typeof id === "string" && /^\d+$/.test(id)
+      )
+    ) {
+      return res.status(400).json({
+        error: "Invalid friend selection.",
+      });
+    }
+
+    // Remove duplicate IDs and exclude the capsule creator.
+    const uniqueFriendIds = [...new Set(friendIds)].filter(
+      (id) => id !== String(req.userId)
+    );
+
+    // Confirm every selected friend is a registered non-admin user.
+    if (uniqueFriendIds.length > 0) {
+      const placeholders = uniqueFriendIds.map(() => "?").join(", ");
+
+      const [registeredFriends] = await pool.execute(
+        `SELECT id FROM app_users
+         WHERE id IN (${placeholders}) AND role = 'user'`,
+        uniqueFriendIds
+      );
+
+      if (registeredFriends.length !== uniqueFriendIds.length) {
+        return res.status(400).json({
+          error: "One or more selected friends are invalid.",
+        });
+      }
+    }
+
+    const capsuleId = crypto.randomInt(1, 2147483647);
+    const groupId = crypto.randomInt(1, 2147483647);
+
+    // Start a transaction so all database changes succeed together.
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Create the capsule group.
+    await connection.execute(
+      `INSERT INTO capsule_groups
+       (id, name, created_by)
+       VALUES (?, ?, ?)`,
+      [groupId, title.trim(), req.userId]
+    );
+
+    // Add the capsule creator to the group.
+    await connection.execute(
+      `INSERT INTO group_members
+       (group_id, user_id)
+       VALUES (?, ?)`,
+      [groupId, req.userId]
+    );
+
+    // Add selected friends to the group.
+    for (const friendId of uniqueFriendIds) {
+      await connection.execute(
+        `INSERT INTO group_members
+         (group_id, user_id)
+         VALUES (?, ?)`,
+        [groupId, friendId]
+      );
+    }
+
+    // Create the capsule associated with the group.
+    await connection.execute(
+      `INSERT INTO capsules
+       (id, group_id, created_by, title, description, opens_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        capsuleId,
+        groupId,
+        req.userId,
+        title.trim(),
+        typeof description === "string" ? description.trim() : null,
+        opensAt,
+      ]
+    );
+
+    // Save the capsule and all group memberships together.
+    await connection.commit();
+
+    return res.status(201).json({
+      message: "Capsule created successfully.",
+      capsule: {
+        id: String(capsuleId),
+        groupId: String(groupId),
+        createdBy: String(req.userId),
+        title: title.trim(),
+        description:
+          typeof description === "string" ? description.trim() : null,
+        opensAt,
+      },
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
+    console.error("Capsule creation failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to create capsule.",
+    });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+});
+
+// Retrieves capsules and their saved registered members.
+app.get("/api/capsules", authenticateUser, async (req, res) => {
+  try {
+    // Get every capsule the logged-in user belongs to.
+    const [capsules] = await pool.execute(
+      `SELECT
+      capsules.id,
+      capsules.group_id,
+      capsules.created_by,
+      capsules.title,
+      capsules.description,
+      capsules.opens_at,
+      capsules.created_at,
+      (
+        SELECT COUNT(*)
+        FROM messages
+        WHERE messages.capsule_id = capsules.id
+      ) AS memory_count
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE group_members.user_id = ?
+       ORDER BY capsules.created_at DESC`,
+      [req.userId]
+    );
+
+    // NEW: Load the registered members of each capsule group.
+    const capsuleMembers = await Promise.all(
+      capsules.map(async (capsule) => {
+        const [members] = await pool.execute(
+          `SELECT u.id, u.name
+           FROM group_members gm
+           JOIN app_users u ON gm.user_id = u.id
+           WHERE gm.group_id = ?
+           ORDER BY u.name ASC`,
+          [capsule.group_id]
+        );
+
+        return members.map((member) => ({
+          id: String(member.id),
+          name: member.name,
+        }));
+      })
+    );
+
+    // Include saved members in the response for each capsule.
+    return res.json({
+      capsules: capsules.map((capsule, index) => ({
+        id: String(capsule.id),
+        groupId: String(capsule.group_id),
+        createdBy: String(capsule.created_by),
+        title: capsule.title,
+        description: capsule.description,
+        opensAt: capsule.opens_at,
+        createdAt: capsule.created_at,
+        memoryCount: Number(capsule.memory_count),
+        members: capsuleMembers[index],
+      })),
+    });
+  } catch (error) {
+    console.error("Capsule lookup failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to load capsules.",
+    });
+  }
+});
+
+// Adds a memory to a capsule
+app.post("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
+  try {
+    const capsuleId = req.params.id;
+    const { content, photoData } = req.body ?? {};
+
+    if (typeof content !== "string" || !content.trim()) {
+      return res.status(400).json({
+        error: "Memory text is required.",
+      });
+    }
+
+    // Makes sure the logged-in user belongs to this capsule
+    const [capsules] = await pool.execute(
+      `SELECT capsules.id
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE capsules.id = ?
+         AND group_members.user_id = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have access to it.",
+      });
+    }
+
+    const memoryId = crypto.randomInt(1, 2147483647);
+
+    await pool.execute(
+      `INSERT INTO messages
+       (id, capsule_id, user_id, content, photo_data)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        memoryId,
+        capsuleId,
+        req.userId,
+        content.trim(),
+        typeof photoData === "string" ? photoData : null,
+      ]
+    );
+
+    return res.status(201).json({
+      message: "Memory added successfully.",
+      memory: {
+        id: String(memoryId),
+        capsuleId: String(capsuleId),
+        userId: String(req.userId),
+        content: content.trim(),
+        photoData:
+          typeof photoData === "string" ? photoData : null,
+      },
+    });
+  } catch (error) {
+    console.error("Memory creation failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to add memory.",
+    });
+  }
+});
+
+// Loads memories for a capsule
+app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
+  try {
+    const capsuleId = req.params.id;
+
+    // Makes sure the logged-in user belongs to this capsule
+    const [capsules] = await pool.execute(
+      `SELECT capsules.id
+       FROM capsules
+       INNER JOIN group_members
+         ON capsules.group_id = group_members.group_id
+       WHERE capsules.id = ?
+         AND group_members.user_id = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have access to it.",
+      });
+    }
+
+    const [memories] = await pool.execute(
+      `SELECT id, capsule_id, user_id, content, photo_data, created_at
+       FROM messages
+       WHERE capsule_id = ?
+       ORDER BY created_at ASC`,
+      [capsuleId]
+    );
+
+    return res.json({
+      memories: memories.map((memory) => ({
+        id: String(memory.id),
+        capsuleId: String(memory.capsule_id),
+        userId: String(memory.user_id),
+        content: memory.content,
+        photoData: memory.photo_data,
+        createdAt: memory.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("Memory lookup failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to load memories.",
+    });
+  }
+});
+// Permanently unlocks a capsule for testing/demo purposes
+app.patch(
+  "/api/capsules/:id/unlock-now",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const capsuleId = req.params.id;
+
+      // Makes sure the logged-in user belongs to the capsule
+      const [capsules] = await pool.execute(
+        `SELECT capsules.id
+         FROM capsules
+         INNER JOIN group_members
+           ON capsules.group_id = group_members.group_id
+         WHERE capsules.id = ?
+           AND group_members.user_id = ?
+         LIMIT 1`,
+        [capsuleId, req.userId]
+      );
+
+      if (capsules.length === 0) {
+        return res.status(404).json({
+          error: "Capsule not found or you do not have access to it.",
+        });
+      }
+
+      // Move the unlock date to now
+      await pool.execute(
+        `UPDATE capsules
+         SET opens_at = NOW()
+         WHERE id = ?`,
+        [capsuleId]
+      );
+
+      return res.json({
+        message: "Capsule unlocked successfully.",
+      });
+    } catch (error) {
+      console.error("Test unlock failed:", error);
+
+      return res.status(500).json({
+        error: "Unable to unlock capsule.",
+      });
+    }
+  }
+);
+// Starts the backend and connects to MySQL.
 async function startServer() {
   pool = mysql.createPool({
     ...dbConfig,
@@ -300,11 +672,86 @@ async function startServer() {
   // Verify MySQL is accessible before starting the API.
   await pool.query("SELECT 1");
 
+  // Add persistent friend requests to existing databases without resetting their data.
+  await pool.query(FRIEND_REQUESTS_SCHEMA);
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`API running on port ${PORT}`);
     console.log("MySQL connection successful");
   });
 }
+
+// Deletes a capsule created by the logged-in user.
+app.delete("/api/capsules/:id", authenticateUser, async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const capsuleId = req.params.id;
+
+    // Make sure the capsule belongs to the logged-in user.
+    const [capsules] = await connection.execute(
+      `SELECT id, group_id
+       FROM capsules
+       WHERE id = ? AND created_by = ?
+       LIMIT 1`,
+      [capsuleId, req.userId]
+    );
+
+    if (capsules.length === 0) {
+      return res.status(404).json({
+        error: "Capsule not found or you do not have permission to delete it.",
+      });
+    }
+
+    const groupId = capsules[0].group_id;
+
+    await connection.beginTransaction();
+
+    // Delete any messages connected to the capsule.
+    await connection.execute(
+      `DELETE FROM messages
+       WHERE capsule_id = ?`,
+      [capsuleId]
+    );
+
+    // Delete the capsule.
+    await connection.execute(
+      `DELETE FROM capsules
+       WHERE id = ?`,
+      [capsuleId]
+    );
+
+    // Remove the capsule's group memberships.
+    await connection.execute(
+      `DELETE FROM group_members
+       WHERE group_id = ?`,
+      [groupId]
+    );
+
+    // Delete the now-unused group.
+    await connection.execute(
+      `DELETE FROM capsule_groups
+       WHERE id = ?`,
+      [groupId]
+    );
+
+    await connection.commit();
+
+    return res.json({
+      message: "Capsule deleted successfully.",
+    });
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("Capsule deletion failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to delete capsule.",
+    });
+  } finally {
+    connection.release();
+  }
+});
 
 startServer().catch((error) => {
   console.error("Failed to start API:", error.message);

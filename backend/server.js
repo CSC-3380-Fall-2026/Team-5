@@ -266,6 +266,195 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
   }
 });
 
+// Changes the logged-in user's password after verifying the current one.
+app.put("/api/users/me/password", authenticateUser, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body ?? {};
+
+    if (
+      typeof currentPassword !== "string" ||
+      typeof newPassword !== "string" ||
+      !currentPassword ||
+      !newPassword
+    ) {
+      return res.status(400).json({
+        error: "Current and new password are required.",
+      });
+    }
+
+    if (newPassword.length < 8 || newPassword.length > 72) {
+      return res.status(400).json({
+        error: "Password must be between 8 and 72 characters.",
+      });
+    }
+
+    if (newPassword === currentPassword) {
+      return res.status(400).json({
+        error: "New password must be different from the current one.",
+      });
+    }
+
+    const [users] = await pool.execute(
+      `SELECT password_hash FROM app_users WHERE id = ? LIMIT 1`,
+      [req.userId]
+    );
+
+    const user = users[0];
+
+    if (!user || !user.password_hash) {
+      return res.status(400).json({
+        error: "This account does not have a password set.",
+      });
+    }
+
+    const matches = await bcrypt.compare(currentPassword, user.password_hash);
+
+    if (!matches) {
+      return res.status(401).json({
+        error: "Current password is incorrect.",
+      });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+
+    await pool.execute(
+      `UPDATE app_users SET password_hash = ? WHERE id = ?`,
+      [newHash, req.userId]
+    );
+
+    return res.json({ message: "Password updated successfully." });
+  } catch (error) {
+    console.error("Password change failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to change password.",
+    });
+  }
+});
+
+// Updates the logged-in user's email after confirming their password.
+app.put("/api/users/me/email", authenticateUser, async (req, res) => {
+  try {
+    const { newEmail, currentPassword } = req.body ?? {};
+
+    if (
+      typeof newEmail !== "string" ||
+      typeof currentPassword !== "string" ||
+      !newEmail.trim() ||
+      !currentPassword
+    ) {
+      return res.status(400).json({
+        error: "New email and current password are required.",
+      });
+    }
+
+    const cleanEmail = newEmail.trim().toLowerCase();
+
+    if (
+      cleanEmail.length > 255 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
+    ) {
+      return res.status(400).json({
+        error: "Please provide a valid email address.",
+      });
+    }
+
+    const [users] = await pool.execute(
+      `SELECT email, password_hash FROM app_users WHERE id = ? LIMIT 1`,
+      [req.userId]
+    );
+
+    const user = users[0];
+
+    if (!user || !user.password_hash) {
+      return res.status(400).json({
+        error: "This account does not have a password set.",
+      });
+    }
+
+    const matches = await bcrypt.compare(currentPassword, user.password_hash);
+
+    if (!matches) {
+      return res.status(401).json({
+        error: "Password is incorrect.",
+      });
+    }
+
+    if (cleanEmail === user.email) {
+      return res.status(400).json({
+        error: "That is already your email address.",
+      });
+    }
+
+    await pool.execute(
+      `UPDATE app_users SET email = ? WHERE id = ?`,
+      [cleanEmail, req.userId]
+    );
+
+    return res.json({
+      message: "Email updated successfully.",
+      email: cleanEmail,
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        error: "An account with this email already exists.",
+      });
+    }
+
+    console.error("Email update failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to update email.",
+    });
+  }
+});
+
+// Updates the logged-in user's name and bio.
+app.put("/api/users/me/profile", authenticateUser, async (req, res) => {
+  try {
+    const { name, bio } = req.body ?? {};
+
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({
+        error: "Name is required.",
+      });
+    }
+
+    const cleanName = name.trim();
+    const cleanBio = typeof bio === "string" ? bio.trim() : "";
+
+    if (cleanName.length > 100) {
+      return res.status(400).json({
+        error: "Name must be 100 characters or fewer.",
+      });
+    }
+
+    if (cleanBio.length > 500) {
+      return res.status(400).json({
+        error: "Bio must be 500 characters or fewer.",
+      });
+    }
+
+    await pool.execute(
+      `UPDATE app_users SET name = ?, bio = ? WHERE id = ?`,
+      [cleanName, cleanBio || null, req.userId]
+    );
+
+    return res.json({
+      message: "Profile updated successfully.",
+      name: cleanName,
+      bio: cleanBio || null,
+    });
+  } catch (error) {
+    console.error("Profile update failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to update profile.",
+    });
+  }
+});
+
 // Searches registered users for the Friends directory.
 app.get("/api/users/discover", authenticateUser, async (req, res) => {
   try {

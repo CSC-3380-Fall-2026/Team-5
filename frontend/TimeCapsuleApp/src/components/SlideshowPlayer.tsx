@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, StyleSheet, Text, TouchableOpacity,View} from 'react-native';
 import { Slide } from '../utils/slideshow';
 import { VideoTemplate } from '../templates/videoTemplates';
-import Sound from 'react-native-sound';
+import Video from 'react-native-video';
 
 type SlideshowPlayerProps = Readonly<{
   slides: Slide[];
@@ -13,47 +13,9 @@ function SlideshowPlayer({ slides, template }: SlideshowPlayerProps) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const opacity = useRef(new Animated.Value(0)).current;
-  const musicRef = useRef<Sound | null>(null);
 
-  //add music
-useEffect(() => {
-  const musicFiles: Record<string, string> = {
-    wedding: 'wedding_music.mp3',
-    college: 'college_music.mp3',
-    travel: 'travel_music.mp3',
-    birthday: 'birthday_music.mp3',
-    bestfriends: 'friends_music.mp3',
-  };
+  // Plays the music for the selected video template
 
-  const musicFile = musicFiles[template.id];
-
-  if (!musicFile) {
-    return;
-  }
-
-  const music = new Sound(
-    musicFile,
-    Sound.MAIN_BUNDLE,
-    error => {
-      if (error) {
-        console.log('Failed to load music:', error);
-        return;
-      }
-
-      music.setVolume(0.4);
-      music.setNumberOfLoops(-1);
-      music.play();
-    },
-  );
-
-  musicRef.current = music;
-
-  return () => {
-    music.stop();
-    music.release();
-    musicRef.current = null;
-  };
-}, [template.id]);
 
   // Fade each slide in when it changes
   useEffect(() => {
@@ -105,9 +67,31 @@ useEffect(() => {
   const slide = slides[index];
   const textStyle = { color: template.textColor };
   const finished = !playing && index >= slides.length - 1;
+  const musicSources: Record<string, { uri: string }> = {
+  wedding: { uri: 'wedding_music' },
+  college: { uri: 'college_music' },
+  travel: { uri: 'travel_music' },
+  birthday: { uri: 'birthday_music' },
+  bestfriends: { uri: 'friends_music' },
+};
+
+const musicSource = musicSources[template.id];
 
   return (
     <View style={styles.container}>
+    {musicSource ? (
+  <Video
+    source={musicSource}
+    repeat={true}
+    volume={0.35}
+    controls={false}
+    playInBackground={false}
+    onError={error => {
+      console.log('Music playback error:', error);
+    }}
+    style={styles.hiddenAudio}
+  />
+) : null}
     <Image
     source={template.backgroundImage}
     style={styles.backgroundImage}
@@ -183,6 +167,12 @@ slide: {
   alignItems: 'center',
   justifyContent: 'center',
   paddingHorizontal: 24,
+},
+hiddenAudio: {
+  width: 1,
+  height: 1,
+  position: 'absolute',
+  opacity: 0,
 },
 });
 

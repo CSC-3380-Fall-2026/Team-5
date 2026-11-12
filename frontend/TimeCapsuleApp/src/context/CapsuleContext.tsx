@@ -25,6 +25,7 @@ export type Capsule = {
   unlockDate: string;
   friends: string[];
   memories?: Memory[];
+  memoryCount?: number;
 };
 
 // Defines what data/functions are available through the capsule context
@@ -84,27 +85,26 @@ export function CapsuleProvider({children}: CapsuleProviderProps) {
         (capsule: any) => {
           const unlockDate = new Date(capsule.opensAt);
 
-          return {
-            id: capsule.id,
-            name: capsule.title,
-            unlockDate: `${
-              unlockDate.getMonth() + 1
-            }/${unlockDate.getDate()}/${unlockDate.getFullYear()}`,
+      return {
+        id: capsule.id,
+        name: capsule.title,
+        unlockDate: `${
+          unlockDate.getMonth() + 1
+        }/${unlockDate.getDate()}/${unlockDate.getFullYear()}`,
 
-            // Load the actual registered members saved in MySQL.
-            // Exclude the capsule creator from the friends list.
-            friends: (capsule.members ?? [])
-              .filter(
-                (member: {id: string; name: string}) =>
-                  member.id !== capsule.createdBy,
-              )
-              .map(
-                (member: {id: string; name: string}) =>
-                  member.name,
-              ),
+        friends: (capsule.members ?? [])
+          .filter(
+            (member: {id: string; name: string}) =>
+              member.id !== capsule.createdBy,
+          )
+          .map(
+            (member: {id: string; name: string}) =>
+              member.name,
+          ),
 
-            memories: [],
-          };
+        memories: [],
+        memoryCount: capsule.memoryCount ?? 0,
+      };
         },
       );
 
@@ -142,13 +142,14 @@ export function CapsuleProvider({children}: CapsuleProviderProps) {
             return capsule;
           }
 
-          return {
-            ...capsule,
-            memories: [
-              ...(capsule.memories ?? []),
-              memory,
-            ],
-          };
+      return {
+        ...capsule,
+        memories: [
+          ...(capsule.memories ?? []),
+          memory,
+        ],
+        memoryCount: (capsule.memoryCount ?? 0) + 1,
+      };
         }),
       );
     },

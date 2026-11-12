@@ -86,8 +86,16 @@ function HomeScreen({ navigation }: any) {
             onRetry={reload}
           >
             {capsules.map(capsule => (
-              <CapsuleCard key={capsule.id} capsule={capsule} />
-            ))}
+            <CapsuleCard
+              key={capsule.id}
+              capsule={capsule}
+              onPress={() =>
+                navigation.navigate('CapsuleDetails', {
+                  capsule,
+                })
+              }
+            />
+          ))}
           </DataState>
         </View>
         </ScrollView>

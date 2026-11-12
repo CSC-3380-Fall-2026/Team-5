@@ -36,7 +36,11 @@ type CapsuleContextType = {
   // Reload fetches saved capsules asynchronously and reports failures through error.
   reload: () => Promise<void>;
   addCapsule: (capsule: Capsule) => void;
-  addMemory: (capsuleId: string, memory: Memory) => void;
+  addMemory: (
+    capsuleId: string,
+    memory: Memory,
+    increaseCount?: boolean,
+  ) => void;
   setCapsulesFromBackend: (capsules: Capsule[]) => void;
 };
 
@@ -134,8 +138,12 @@ export function CapsuleProvider({children}: CapsuleProviderProps) {
   );
 
   // Adds a memory to a specific capsule
-  const addMemory = useCallback(
-    (capsuleId: string, memory: Memory) => {
+ const addMemory = useCallback(
+    (
+      capsuleId: string,
+      memory: Memory,
+      increaseCount = true,
+    ) => {
       setCapsules(currentCapsules =>
         currentCapsules.map(capsule => {
           if (capsule.id !== capsuleId) {
@@ -148,8 +156,9 @@ export function CapsuleProvider({children}: CapsuleProviderProps) {
           ...(capsule.memories ?? []),
           memory,
         ],
-        memoryCount: (capsule.memoryCount ?? 0) + 1,
-      };
+    memoryCount: increaseCount
+      ? (capsule.memoryCount ?? 0) + 1
+      : capsule.memoryCount,      };
         }),
       );
     },

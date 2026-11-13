@@ -29,6 +29,10 @@ function AddMemoryScreen({ route, navigation }: any) {
 
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+} | null>(null);
 
   // Opens the phone's photo library
   async function choosePhoto() {
@@ -67,6 +71,9 @@ function AddMemoryScreen({ route, navigation }: any) {
     const validationErrors = validateMemory(
       memoryText,
       photoUri,
+      latitude: location?.latitude ?? null,
+      longitude: location?.longitude ?? null,
+    };
     );
 
     setErrors(validationErrors);
@@ -214,6 +221,33 @@ function AddMemoryScreen({ route, navigation }: any) {
             No photo selected yet.
           </Text>
         )}
+
+        {/* Location selection */}
+<Text style={styles.label}>LOCATION</Text>
+
+<TouchableOpacity
+  style={styles.locationButton}
+  onPress={() =>
+    navigation.navigate('LocationPicker', {
+      onSelectLocation: (selectedLocation: {
+        latitude: number;
+        longitude: number;
+      }) => {
+        setLocation(selectedLocation);
+      },
+    })
+  }
+>
+  <Text style={styles.locationButtonText}>
+    ADD LOCATION
+  </Text>
+</TouchableOpacity>
+
+<Text style={styles.locationHint}>
+  {location
+    ? `Location selected: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+    : 'No location selected yet.'}
+</Text>
 
         {/* Save memory */}
         <TouchableOpacity
@@ -364,6 +398,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#BFA88D',
   },
+
+  locationButton: {
+  backgroundColor: '#F8F0E3',
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  height: 52,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+locationButtonText: {
+  color: '#50382B',
+  fontSize: 15,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
+
+locationHint: {
+  color: '#806A58',
+  fontSize: 13,
+  fontStyle: 'italic',
+  marginTop: 10,
+  marginBottom: 24,
+},
 
   // Add memory button
   addButton: {

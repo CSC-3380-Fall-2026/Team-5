@@ -1,5 +1,4 @@
-﻿import React, { useState } from 'react';
-import {
+﻿import React, { useEffect, useState } from 'react';import {
   View,
   Text,
   StyleSheet,
@@ -12,23 +11,95 @@ import { useCapsules } from '../context/CapsuleContext';
 import { VIDEO_TEMPLATES } from '../templates/videoTemplates';
 import { buildSlides } from '../utils/slideshow';
 import { isCapsuleLocked } from '../utils/capsuleLock';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
 
 function VideoTemplatesScreen({ route, navigation }: any) {
-  const { capsules } = useCapsules();
-
+const { capsules } = useCapsules();
   // Only capsules that have opened can be turned into a video
   const unlocked = capsules.filter(c => !isCapsuleLocked(c.unlockDate));
 
   const [capsuleId, setCapsuleId] = useState<string | null>(
     route?.params?.capsule?.id ?? null,
   );
+  const [videoMemories, setVideoMemories] = useState<any[]>([]);
   const [templateId, setTemplateId] = useState(VIDEO_TEMPLATES[0].id);
   const [previewing, setPreviewing] = useState(false);
 
   const capsule = unlocked.find(c => c.id === capsuleId);
+
+    useEffect(() => {
+  async function loadMemories() {
+    if (!capsuleId) {
+      setVideoMemories([]);
+      return;
+    }
+
+    try {
+      const token = await getAuthToken();
+
+      if (!token) {
+        return;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/capsules/${capsuleId}/memories`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          'Unable to load video memories:',
+          data.error,
+        );
+        return;
+      }
+
+      const loadedMemories = data.memories.map(
+        (memory: any) => ({
+          id: memory.id,
+          text: memory.content,
+          photoUri: memory.photoData ?? '',
+        }),
+      );
+
+      setVideoMemories(loadedMemories);
+    } catch (error) {
+      console.error(
+        'Video memory loading error:',
+        error,
+      );
+    }
+  }
+
+  loadMemories().catch(error => {
+    console.error(
+      'Video memory loading error:',
+      error,
+    );
+  });
+}, [capsuleId]);
+
+
   const template =
     VIDEO_TEMPLATES.find(t => t.id === templateId) ?? VIDEO_TEMPLATES[0];
-  const slides = capsule ? buildSlides(capsule) : [];
+    const videoCapsule = capsule
+    ? {
+        ...capsule,
+        memories: videoMemories,
+      }
+    : undefined;
+
+  const slides = videoCapsule
+    ? buildSlides(videoCapsule)
+    : [];
   const canPreview = capsule !== undefined && slides.length > 0;
 
   // Preview mode: play the slideshow full screen

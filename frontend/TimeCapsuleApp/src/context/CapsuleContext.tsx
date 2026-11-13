@@ -25,6 +25,7 @@ export type Capsule = {
   unlockDate: string;
   friends: string[];
   memories?: Memory[];
+  memoryCount?: number;
 };
 
 // Defines what data/functions are available through the capsule context
@@ -35,7 +36,11 @@ type CapsuleContextType = {
   // Reload fetches saved capsules asynchronously and reports failures through error.
   reload: () => Promise<void>;
   addCapsule: (capsule: Capsule) => void;
-  addMemory: (capsuleId: string, memory: Memory) => void;
+  addMemory: (
+    capsuleId: string,
+    memory: Memory,
+    increaseCount?: boolean,
+  ) => void;
   setCapsulesFromBackend: (capsules: Capsule[]) => void;
 };
 
@@ -84,27 +89,26 @@ export function CapsuleProvider({children}: CapsuleProviderProps) {
         (capsule: any) => {
           const unlockDate = new Date(capsule.opensAt);
 
-          return {
-            id: capsule.id,
-            name: capsule.title,
-            unlockDate: `${
-              unlockDate.getMonth() + 1
-            }/${unlockDate.getDate()}/${unlockDate.getFullYear()}`,
+      return {
+        id: capsule.id,
+        name: capsule.title,
+        unlockDate: `${
+          unlockDate.getMonth() + 1
+        }/${unlockDate.getDate()}/${unlockDate.getFullYear()}`,
 
-            // Load the actual registered members saved in MySQL.
-            // Exclude the capsule creator from the friends list.
-            friends: (capsule.members ?? [])
-              .filter(
-                (member: {id: string; name: string}) =>
-                  member.id !== capsule.createdBy,
-              )
-              .map(
-                (member: {id: string; name: string}) =>
-                  member.name,
-              ),
+        friends: (capsule.members ?? [])
+          .filter(
+            (member: {id: string; name: string}) =>
+              member.id !== capsule.createdBy,
+          )
+          .map(
+            (member: {id: string; name: string}) =>
+              member.name,
+          ),
 
-            memories: [],
-          };
+        memories: [],
+        memoryCount: capsule.memoryCount ?? 0,
+      };
         },
       );
 
@@ -134,21 +138,27 @@ export function CapsuleProvider({children}: CapsuleProviderProps) {
   );
 
   // Adds a memory to a specific capsule
-  const addMemory = useCallback(
-    (capsuleId: string, memory: Memory) => {
+ const addMemory = useCallback(
+    (
+      capsuleId: string,
+      memory: Memory,
+      increaseCount = true,
+    ) => {
       setCapsules(currentCapsules =>
         currentCapsules.map(capsule => {
           if (capsule.id !== capsuleId) {
             return capsule;
           }
 
-          return {
-            ...capsule,
-            memories: [
-              ...(capsule.memories ?? []),
-              memory,
-            ],
-          };
+      return {
+        ...capsule,
+        memories: [
+          ...(capsule.memories ?? []),
+          memory,
+        ],
+    memoryCount: increaseCount
+      ? (capsule.memoryCount ?? 0) + 1
+      : capsule.memoryCount,      };
         }),
       );
     },

@@ -18,7 +18,7 @@ const dbConfig = getDatabaseConfig();
 validateDatabaseConfig(dbConfig);
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -439,13 +439,18 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
     // Get every capsule the logged-in user belongs to.
     const [capsules] = await pool.execute(
       `SELECT
-         capsules.id,
-         capsules.group_id,
-         capsules.created_by,
-         capsules.title,
-         capsules.description,
-         capsules.opens_at,
-         capsules.created_at
+      capsules.id,
+      capsules.group_id,
+      capsules.created_by,
+      capsules.title,
+      capsules.description,
+      capsules.opens_at,
+      capsules.created_at,
+      (
+        SELECT COUNT(*)
+        FROM messages
+        WHERE messages.capsule_id = capsules.id
+      ) AS memory_count
        FROM capsules
        INNER JOIN group_members
          ON capsules.group_id = group_members.group_id
@@ -483,6 +488,7 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
         description: capsule.description,
         opensAt: capsule.opens_at,
         createdAt: capsule.created_at,
+        memoryCount: Number(capsule.memory_count),
         members: capsuleMembers[index],
       })),
     });
@@ -609,7 +615,52 @@ app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
     });
   }
 });
+// Permanently unlocks a capsule for testing/demo purposes
+app.patch(
+  "/api/capsules/:id/unlock-now",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const capsuleId = req.params.id;
 
+      // Makes sure the logged-in user belongs to the capsule
+      const [capsules] = await pool.execute(
+        `SELECT capsules.id
+         FROM capsules
+         INNER JOIN group_members
+           ON capsules.group_id = group_members.group_id
+         WHERE capsules.id = ?
+           AND group_members.user_id = ?
+         LIMIT 1`,
+        [capsuleId, req.userId]
+      );
+
+      if (capsules.length === 0) {
+        return res.status(404).json({
+          error: "Capsule not found or you do not have access to it.",
+        });
+      }
+
+      // Move the unlock date to now
+      await pool.execute(
+        `UPDATE capsules
+         SET opens_at = NOW()
+         WHERE id = ?`,
+        [capsuleId]
+      );
+
+      return res.json({
+        message: "Capsule unlocked successfully.",
+      });
+    } catch (error) {
+      console.error("Test unlock failed:", error);
+
+      return res.status(500).json({
+        error: "Unable to unlock capsule.",
+      });
+    }
+  }
+);
 // Starts the backend and connects to MySQL.
 async function startServer() {
   pool = mysql.createPool({

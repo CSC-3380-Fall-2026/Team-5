@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import {
 function CapsuleDetailsScreen({ route, navigation }: any) {
   const { capsule: routeCapsule } = route.params;
   const { capsules, addMemory } = useCapsules();
+  const loadedMemoryIds = useRef<Set<string>>(new Set());
   
   // Gets the newest version of the capsule from context
   const capsule: Capsule =
@@ -63,18 +64,29 @@ const memories = useMemo(
       }
 
       data.memories.forEach((memory: any) => {
-        const alreadyExists = memories.some(
-          existingMemory => existingMemory.id === memory.id,
-        );
+    const alreadyExists =
+      memories.some(
+        existingMemory => existingMemory.id === memory.id,
+      ) ||
+      loadedMemoryIds.current.has(memory.id);
 
-        if (!alreadyExists) {
-          addMemory(capsule.id, {
-            id: memory.id,
-            text: memory.content,
-            photoUri: memory.photoData ?? '',
-          });
-        }
-      });
+    if (!alreadyExists) {
+      // Mark it as loaded before updating state
+      // so another effect run cannot add it again
+      loadedMemoryIds.current.add(memory.id);
+
+      addMemory(
+      capsule.id,
+      {
+        id: memory.id,
+        text: memory.content,
+        photoUri: memory.photoData ?? '',
+      },
+      false,
+    );
+    }
+  });
+
     } catch (error) {
       console.error('Memory loading error:', error);
     }
@@ -90,10 +102,12 @@ const memories = useMemo(
   const [modalMessage, setModalMessage] = useState('');
   const [deleteAfterClose, setDeleteAfterClose] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [forceUnlocked, setForceUnlocked] = useState(false);
 
   // Uses the shared capsule 
   // lock helper so every screen follows the same unlock rules
-  const isUnlocked = !isCapsuleLocked(capsule.unlockDate);
+  const isUnlocked =
+  forceUnlocked || !isCapsuleLocked(capsule.unlockDate);
 
   // Deletes this capsule from the backend
   async function deleteCapsule() {
@@ -276,20 +290,23 @@ const memories = useMemo(
 
             {renderMemories()}
           </View>
+          
 
           {/* Opens Add Memory */}
-          <TouchableOpacity
-            style={styles.addMemoryButton}
-            onPress={() =>
-              navigation.navigate('AddMemory', {
-                capsule,
-              })
-            }
-          >
-            <Text style={styles.addMemoryButtonText}>
-              ADD MEMORY
-            </Text>
-          </TouchableOpacity>
+          {!isUnlocked && (
+            <TouchableOpacity
+              style={styles.addMemoryButton}
+              onPress={() =>
+                navigation.navigate('AddMemory', {
+                  capsule,
+                })
+              }
+            >
+              <Text style={styles.addMemoryButtonText}>
+                ADD MEMORY
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Deletes the capsule */}
           <TouchableOpacity
@@ -300,6 +317,51 @@ const memories = useMemo(
               DELETE CAPSULE
             </Text>
           </TouchableOpacity>
+          {!isUnlocked && (
+      <TouchableOpacity
+        style={styles.testUnlockLink}
+        onPress={async () => {
+          try {
+            const token = await getAuthToken();
+
+            if (!token) {
+              return;
+            }
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/capsules/${capsule.id}/unlock-now`,
+              {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              console.error(
+                'Unable to unlock capsule:',
+                data.error,
+              );
+              return;
+            }
+
+            setForceUnlocked(true);
+          } catch (error) {
+            console.error(
+              'Unlock capsule error:',
+              error,
+            );
+          }
+        }}
+      >
+    <Text style={styles.testUnlockLinkText}>
+      Unlock now for testing
+    </Text>
+  </TouchableOpacity>
+)}
         </Card>
 
         <Modal
@@ -583,6 +645,34 @@ confirmDeleteButtonText: {
   color: '#FFFFFF',
   fontSize: 14,
   fontWeight: '800',
+},
+testUnlockButton: {
+  height: 48,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  backgroundColor: '#FFF9F0',
+},
+
+testUnlockButtonText: {
+  color: '#735641',
+  fontSize: 14,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
+testUnlockLink: {
+  alignSelf: 'center',
+  marginTop: 10,
+  paddingVertical: 4,
+},
+
+testUnlockLinkText: {
+  color: '#806A58',
+  fontSize: 12,
+  textDecorationLine: 'underline',
 },
 });
 

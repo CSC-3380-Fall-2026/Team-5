@@ -7,6 +7,7 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -24,16 +25,24 @@ function AddMemoryScreen({ route, navigation }: any) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoData, setPhotoData] = useState<string | null>(null);
   const [errors, setErrors] = useState<MemoryErrors>({});
+  const [uploading, setUploading] = useState(false);
 
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+} | null>(null);
 
   // Opens the phone's photo library
   async function choosePhoto() {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      includeBase64: true,
-    });
+  const result = await launchImageLibrary({
+    mediaType: 'photo',
+    includeBase64: true,
+    maxWidth: 1200,
+    maxHeight: 1200,
+    quality: 0.7,
+  });
 
     const selectedPhoto = result.assets?.[0];
 
@@ -62,6 +71,9 @@ function AddMemoryScreen({ route, navigation }: any) {
     const validationErrors = validateMemory(
       memoryText,
       photoUri,
+      latitude: location?.latitude ?? null,
+      longitude: location?.longitude ?? null,
+    };
     );
 
     setErrors(validationErrors);
@@ -69,6 +81,7 @@ function AddMemoryScreen({ route, navigation }: any) {
     if (hasErrors(validationErrors)) {
       return;
     }
+    setUploading(true);
 
     try {
       const token = await getAuthToken();
@@ -116,6 +129,8 @@ function AddMemoryScreen({ route, navigation }: any) {
         'Memory creation error:',
         error,
       );
+    } finally {
+    setUploading(false);
     }
   }
 
@@ -207,15 +222,59 @@ function AddMemoryScreen({ route, navigation }: any) {
           </Text>
         )}
 
+        {/* Location selection */}
+<Text style={styles.label}>LOCATION</Text>
+
+<TouchableOpacity
+  style={styles.locationButton}
+  onPress={() =>
+    navigation.navigate('LocationPicker', {
+      onSelectLocation: (selectedLocation: {
+        latitude: number;
+        longitude: number;
+      }) => {
+        setLocation(selectedLocation);
+      },
+    })
+  }
+>
+  <Text style={styles.locationButtonText}>
+    ADD LOCATION
+  </Text>
+</TouchableOpacity>
+
+<Text style={styles.locationHint}>
+  {location
+    ? `Location selected: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+    : 'No location selected yet.'}
+</Text>
+
         {/* Save memory */}
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleAddMemory}
-        >
-          <Text style={styles.addButtonText}>
-            ADD MEMORY
-          </Text>
-        </TouchableOpacity>
+  style={[
+    styles.addButton,
+    uploading ? styles.addButtonDisabled : null,
+  ]}
+  onPress={handleAddMemory}
+  disabled={uploading}
+>
+  {uploading ? (
+    <View style={styles.uploadingRow}>
+      <ActivityIndicator
+        size="small"
+        color="#FFFFFF"
+      />
+
+      <Text style={styles.addButtonText}>
+        UPLOADING MEMORY...
+      </Text>
+    </View>
+  ) : (
+    <Text style={styles.addButtonText}>
+      ADD MEMORY
+    </Text>
+  )}
+</TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -340,6 +399,31 @@ const styles = StyleSheet.create({
     borderColor: '#BFA88D',
   },
 
+  locationButton: {
+  backgroundColor: '#F8F0E3',
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  height: 52,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+locationButtonText: {
+  color: '#50382B',
+  fontSize: 15,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
+
+locationHint: {
+  color: '#806A58',
+  fontSize: 13,
+  fontStyle: 'italic',
+  marginTop: 10,
+  marginBottom: 24,
+},
+
   // Add memory button
   addButton: {
     backgroundColor: '#735641',
@@ -355,6 +439,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  addButtonDisabled: {
+    opacity: 0.6,
+  },
+  uploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
 });
 

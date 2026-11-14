@@ -16,6 +16,9 @@ export type Memory = {
   id: string;
   text: string;
   photoUri: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationName?: string | null;
 };
 
 // Defines the structure of one capsule

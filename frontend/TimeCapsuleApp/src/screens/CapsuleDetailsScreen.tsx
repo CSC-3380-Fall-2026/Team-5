@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import {useFocusEffect} from '@react-navigation/native';
+import {loadCapsuleMemories} from '../services/memories';
 import {
   View,
   Text,
@@ -10,105 +12,65 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { isCapsuleLocked } from '../utils/capsuleLock';
+
 import { API_BASE_URL } from '../services/api';
 import { getAuthToken } from '../services/authStorage';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
 import {
   Capsule,
+  Memory,
   useCapsules,
 } from '../context/CapsuleContext';
 
 function CapsuleDetailsScreen({ route, navigation }: any) {
   const { capsule: routeCapsule } = route.params;
-  const { capsules, addMemory } = useCapsules();
-  const loadedMemoryIds = useRef<Set<string>>(new Set());
+  const { capsules, reload } = useCapsules();
   
   // Gets the newest version of the capsule from context
   const capsule: Capsule =
   capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
 
-const memories = useMemo(
-  () => capsule.memories ?? [],
-  [capsule.memories],
-);
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [loadingMemories, setLoadingMemories] = useState(true);
+  const [memoryError, setMemoryError] = useState('');
+  const [refresh, setRefresh] = useState(0);
 
-  useEffect(() => {
-  async function loadMemories() {
-    try {
-      const token = await getAuthToken();
-
-      if (!token) {
-        return;
+  // Replace from the server on focus/unlock; never keep a permanent "already loaded" ID set.
+  useFocusEffect(useCallback(() => {
+    const controller = new AbortController();
+    let inFlight = false;
+    setMemories([]);
+    setIsUnlocked(false);
+    setLoadingMemories(true);
+    setMemoryError('');
+    async function load() {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await loadCapsuleMemories(capsule.id, controller.signal);
+        if (controller.signal.aborted) return;
+        setMemories(result.memories);
+        setIsUnlocked(!result.locked);
+        setMemoryError('');
+      } catch (error) {
+        if (!controller.signal.aborted) setMemoryError(error instanceof Error ? error.message : 'Unable to load memories.');
+      } finally {
+        inFlight = false;
+        if (!controller.signal.aborted) setLoadingMemories(false);
       }
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/capsules/${capsule.id}/memories`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error(
-          'Unable to load memories:',
-          data.error,
-        );
-        return;
-      }
-
-      data.memories.forEach((memory: any) => {
-    const alreadyExists =
-      memories.some(
-        existingMemory => existingMemory.id === memory.id,
-      ) ||
-      loadedMemoryIds.current.has(memory.id);
-
-    if (!alreadyExists) {
-      // Mark it as loaded before updating state
-      // so another effect run cannot add it again
-      loadedMemoryIds.current.add(memory.id);
-
-      addMemory(
-      capsule.id,
-      {
-        id: memory.id,
-        text: memory.content,
-        photoUri: memory.photoData ?? '',
-      },
-      false,
-    );
     }
-  });
-
-    } catch (error) {
-      console.error('Memory loading error:', error);
-    }
-  }
-
-  loadMemories().catch(error => {
-    console.error('Memory loading error:', error);
-  });
-}, [capsule.id, addMemory, memories]);
+    load();
+    const timer = setInterval(load, 15000);
+    return () => {controller.abort(); clearInterval(timer);};
+  }, [capsule.id, refresh]));
 
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [deleteAfterClose, setDeleteAfterClose] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [forceUnlocked, setForceUnlocked] = useState(false);
-
-  // Uses the shared capsule 
-  // lock helper so every screen follows the same unlock rules
-  const isUnlocked =
-  forceUnlocked || !isCapsuleLocked(capsule.unlockDate);
-
   // Deletes this capsule from the backend
   async function deleteCapsule() {
     try {
@@ -161,10 +123,12 @@ const memories = useMemo(
 
   // Controls what is shown in the memories section
   function renderMemories() {
+    if (loadingMemories) return <Text style={styles.value}>Loading memories...</Text>;
+    if (memoryError) return <TouchableOpacity onPress={() => setRefresh(n => n + 1)}><Text style={styles.value}>{memoryError} Tap to retry.</Text></TouchableOpacity>;
     if (!isUnlocked) {
       return (
         <Text style={styles.value}>
-          {memories.length} memories added
+          {capsule.memoryCount ?? memories.length} memories added
         </Text>
       );
     }
@@ -177,8 +141,11 @@ const memories = useMemo(
       );
     }
 
-    return memories.map(memory => (
+    const ordered = [...memories].sort((a, b) => Number(b.id === route.params.memoryId) - Number(a.id === route.params.memoryId));
+    return ordered.map(memory => (
       <View key={memory.id} style={styles.memory}>
+        {memory.id === route.params.memoryId && <Text style={styles.label}>SELECTED MAP MEMORY</Text>}
+        {!!memory.locationName && <Text style={styles.value}>{memory.locationName}</Text>}
         <Text style={styles.memoryText}>
           {memory.text}
         </Text>
@@ -250,7 +217,7 @@ const memories = useMemo(
                 styles.statusText,
               ]}
             >
-              {isUnlocked ? 'Unlocked' : 'Locked'}
+              {loadingMemories ? 'Checking...' : isUnlocked ? 'Unlocked' : 'Locked'}
             </Text>
           </View>
 
@@ -293,7 +260,7 @@ const memories = useMemo(
           
 
           {/* Opens Add Memory */}
-          {!isUnlocked && (
+          {!loadingMemories && !memoryError && !isUnlocked && (
             <TouchableOpacity
               style={styles.addMemoryButton}
               onPress={() =>
@@ -317,7 +284,7 @@ const memories = useMemo(
               DELETE CAPSULE
             </Text>
           </TouchableOpacity>
-          {!isUnlocked && (
+          {!loadingMemories && !memoryError && !isUnlocked && (
       <TouchableOpacity
         style={styles.testUnlockLink}
         onPress={async () => {
@@ -348,7 +315,8 @@ const memories = useMemo(
               return;
             }
 
-            setForceUnlocked(true);
+            await reload();
+            setRefresh(n => n + 1);
           } catch (error) {
             console.error(
               'Unlock capsule error:',

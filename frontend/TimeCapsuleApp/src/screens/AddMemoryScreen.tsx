@@ -8,6 +8,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -20,6 +21,9 @@ import { API_BASE_URL } from '../services/api';
 import { getAuthToken } from '../services/authStorage';
 import { useCapsules } from '../context/CapsuleContext';
 
+import MemoryLocationPicker from '../components/MemoryLocationPicker';
+import {MemoryLocation} from '../utils/memoryMap';
+
 function AddMemoryScreen({ route, navigation }: any) {
   const [memoryText, setMemoryText] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -29,10 +33,8 @@ function AddMemoryScreen({ route, navigation }: any) {
 
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
-  const [location, setLocation] = useState<{
-    latitude: number;
-    longitude: number;
-} | null>(null);
+  const [location, setLocation] = useState<MemoryLocation | null>(null);
+  const [pickingLocation, setPickingLocation] = useState(false);
 
   // Opens the phone's photo library
   async function choosePhoto() {
@@ -47,6 +49,10 @@ function AddMemoryScreen({ route, navigation }: any) {
     const selectedPhoto = result.assets?.[0];
 
     if (selectedPhoto?.uri) {
+      if (!selectedPhoto.base64) {
+        Alert.alert('Photo unavailable', 'Please choose another photo so it can be saved with your memory.');
+        return;
+      }
       setPhotoUri(selectedPhoto.uri);
 
       if (selectedPhoto.base64) {
@@ -71,9 +77,6 @@ function AddMemoryScreen({ route, navigation }: any) {
     const validationErrors = validateMemory(
       memoryText,
       photoUri,
-      latitude: location?.latitude ?? null,
-      longitude: location?.longitude ?? null,
-    };
     );
 
     setErrors(validationErrors);
@@ -86,9 +89,7 @@ function AddMemoryScreen({ route, navigation }: any) {
     try {
       const token = await getAuthToken();
 
-      if (!token) {
-        return;
-      }
+      if (!token) { throw new Error('Please log in again before saving.'); }
 
       const response = await fetch(
         `${API_BASE_URL}/api/capsules/${capsule.id}/memories`,
@@ -101,6 +102,9 @@ function AddMemoryScreen({ route, navigation }: any) {
           body: JSON.stringify({
             content: memoryText.trim(),
             photoData,
+            latitude: location?.latitude ?? null,
+            longitude: location?.longitude ?? null,
+            locationName: location?.locationName ?? null,
           }),
         },
       );
@@ -108,27 +112,21 @@ function AddMemoryScreen({ route, navigation }: any) {
       const data = await response.json();
 
       if (!response.ok) {
-        console.error(
-          'Unable to save memory:',
-          data.error,
-        );
-        return;
+        throw new Error(data.error || 'Unable to save memory.');
       }
 
       const newMemory = {
         id: data.memory.id,
         text: data.memory.content,
         photoUri: photoData ?? photoUri ?? '',
+        ...location,
       };
 
       addMemory(capsule.id, newMemory);
 
       navigation.goBack();
     } catch (error) {
-      console.error(
-        'Memory creation error:',
-        error,
-      );
+      Alert.alert('Unable to save memory', error instanceof Error ? error.message : 'Please try again.');
     } finally {
     setUploading(false);
     }
@@ -227,16 +225,7 @@ function AddMemoryScreen({ route, navigation }: any) {
 
 <TouchableOpacity
   style={styles.locationButton}
-  onPress={() =>
-    navigation.navigate('LocationPicker', {
-      onSelectLocation: (selectedLocation: {
-        latitude: number;
-        longitude: number;
-      }) => {
-        setLocation(selectedLocation);
-      },
-    })
-  }
+  onPress={() => setPickingLocation(true)}
 >
   <Text style={styles.locationButtonText}>
     ADD LOCATION
@@ -245,9 +234,12 @@ function AddMemoryScreen({ route, navigation }: any) {
 
 <Text style={styles.locationHint}>
   {location
-    ? `Location selected: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+    ? location.locationName || `Location selected: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
     : 'No location selected yet.'}
 </Text>
+
+        {location && <TouchableOpacity onPress={() => setLocation(null)}><Text style={styles.locationHint}>Remove location</Text></TouchableOpacity>}
+        {pickingLocation && <MemoryLocationPicker initial={location} onClose={() => setPickingLocation(false)} onSave={point => {setLocation(point);setPickingLocation(false);}} />}
 
         {/* Save memory */}
         <TouchableOpacity

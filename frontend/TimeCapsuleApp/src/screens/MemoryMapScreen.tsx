@@ -1,98 +1,118 @@
-﻿import React from 'react';
-import {View,Text,StyleSheet, TouchableOpacity,} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
-
-const mapHTML = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0" />
-
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-    }
-
-    #map {
-      height: 100%;
-      width: 100%;
-      background: #F8F0E3;
-    }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <script>
-    const map = L.map('map').setView(
-      [30.4515, -91.1871],
-      12
-    );
-
-    L.tileLayer(
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }
-    ).addTo(map);
-  </script>
-</body>
-</html>
-`;
+import { useFocusEffect } from '@react-navigation/native';
+import MemoryMapView from '../components/MemoryMapView';
+import { MapMemory } from '../utils/memoryMap';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
+import { useCapsules } from '../context/CapsuleContext';
 
 function MemoryMapScreen({ navigation }: any) {
+  const { capsules } = useCapsules();
+  const [memories, setMemories] = useState<MapMemory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      const controller = new AbortController();
+      let inFlight = false;
+      setMemories([]);
+      setLoading(true);
+      setError('');
+      async function load() {
+        if (inFlight) return;
+        inFlight = true;
+        try {
+          const token = await getAuthToken();
+          if (!token) throw new Error('Please log in again.');
+          const response = await fetch(`${API_BASE_URL}/api/memories/map`, {
+            signal: controller.signal,
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await response.json();
+          if (!response.ok)
+            throw new Error(data.error || 'Unable to load map memories.');
+          if (!controller.signal.aborted) {
+            setMemories(data.memories);
+            setError('');
+          }
+        } catch (e) {
+          if (!controller.signal.aborted) {
+            setMemories([]);
+            setError(
+              e instanceof Error ? e.message : 'Unable to load memories.',
+            );
+          }
+        } finally {
+          inFlight = false;
+          if (!controller.signal.aborted) setLoading(false);
+        }
+      }
+      load();
+      const timer = setInterval(load, 30000);
+      return () => {
+        controller.abort();
+        clearInterval(timer);
+      };
+    }, [revision]),
+  );
+  function openMemory(id: string) {
+    const memory = memories.find(m => m.id === id);
+    if (!memory) return;
+    const capsule = capsules.find(c => c.id === memory.capsuleId) ?? {
+      id: memory.capsuleId,
+      name: memory.capsuleName,
+      unlockDate: memory.opensAt,
+      friends: [],
+    };
+    navigation.navigate('CapsuleDetails', { capsule, memoryId: id });
+  }
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Back button */}
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-
-        {/* Page heading */}
         <View style={styles.header}>
           <Text style={styles.title}>MEMORY MAP</Text>
-
           <Text style={styles.subtitle}>
             See where your favorite memories were made.
           </Text>
         </View>
-
         <View style={styles.mapContainer}>
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: mapHTML }}
-            style={styles.map}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-          />
+          <MemoryMapView memories={memories} onOpen={openMemory} />
         </View>
-
-        {/* Placeholder content */}
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>
-            No memories on the map yet
-          </Text>
-
-          <Text style={styles.emptyText}>
-            Locations connected to your memories will appear here.
-          </Text>
-        </View>
+        {loading ? (
+          <ActivityIndicator color="#735641" />
+        ) : error ? (
+          <TouchableOpacity onPress={() => setRevision(n => n + 1)}>
+            <Text style={styles.emptyText}>{error} Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>
+              {memories.length
+                ? `${memories.length} memories on the map`
+                : 'No opened memories on the map yet'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {memories.length
+                ? 'Tap a pin to see photos and open the linked memory.'
+                : 'Add a location when saving a memory. Its photo and pin appear after the capsule opens.'}
+            </Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -124,7 +144,7 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 14,
   },
 
   title: {

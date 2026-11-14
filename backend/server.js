@@ -15,7 +15,7 @@ const {
 loadEnvironment();
 
 const dbConfig = getDatabaseConfig();
-validateDatabaseConfig(dbConfig);
+if (require.main === module) validateDatabaseConfig(dbConfig);
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -23,6 +23,8 @@ app.use(express.json({ limit: "10mb" }));
 const PORT = Number(process.env.PORT || 3000);
 
 let pool;
+const {ensureMemoryLocationSchema, validLocation, registerMemoryMapRoutes} = require('./memoryMap');
+registerMemoryMapRoutes(app, () => pool, authenticateUser);
 
 // Friend routes share the existing login middleware and MySQL connection pool.
 registerFriendRoutes(app, () => pool, authenticateUser);
@@ -505,7 +507,10 @@ app.get("/api/capsules", authenticateUser, async (req, res) => {
 app.post("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
   try {
     const capsuleId = req.params.id;
-    const { content, photoData } = req.body ?? {};
+    const { content, photoData, latitude = null, longitude = null, locationName = null } = req.body ?? {};
+    if (!validLocation(latitude, longitude) || (locationName !== null && (typeof locationName !== 'string' || locationName.length > 500))) {
+      return res.status(400).json({error: 'Invalid memory location.'});
+    }
 
     if (typeof content !== "string" || !content.trim()) {
       return res.status(400).json({
@@ -515,7 +520,7 @@ app.post("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
 
     // Makes sure the logged-in user belongs to this capsule
     const [capsules] = await pool.execute(
-      `SELECT capsules.id
+      `SELECT capsules.id, capsules.opens_at
        FROM capsules
        INNER JOIN group_members
          ON capsules.group_id = group_members.group_id
@@ -535,14 +540,15 @@ app.post("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
 
     await pool.execute(
       `INSERT INTO messages
-       (id, capsule_id, user_id, content, photo_data)
-       VALUES (?, ?, ?, ?, ?)`,
+       (id, capsule_id, user_id, content, photo_data, latitude, longitude, location_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         memoryId,
         capsuleId,
         req.userId,
         content.trim(),
         typeof photoData === "string" ? photoData : null,
+        latitude, longitude, latitude == null ? null : locationName,
       ]
     );
 
@@ -555,6 +561,7 @@ app.post("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
         content: content.trim(),
         photoData:
           typeof photoData === "string" ? photoData : null,
+        latitude, longitude, locationName,
       },
     });
   } catch (error) {
@@ -573,7 +580,7 @@ app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
 
     // Makes sure the logged-in user belongs to this capsule
     const [capsules] = await pool.execute(
-      `SELECT capsules.id
+      `SELECT capsules.id, capsules.opens_at
        FROM capsules
        INNER JOIN group_members
          ON capsules.group_id = group_members.group_id
@@ -589,8 +596,12 @@ app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
       });
     }
 
+    if (new Date(capsules[0].opens_at).getTime() > Date.now()) {
+      return res.status(423).json({error: 'This capsule is still locked.'});
+    }
+
     const [memories] = await pool.execute(
-      `SELECT id, capsule_id, user_id, content, photo_data, created_at
+      `SELECT id, capsule_id, user_id, content, photo_data, latitude, longitude, location_name, created_at
        FROM messages
        WHERE capsule_id = ?
        ORDER BY created_at ASC`,
@@ -604,6 +615,7 @@ app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
         userId: String(memory.user_id),
         content: memory.content,
         photoData: memory.photo_data,
+        latitude: memory.latitude, longitude: memory.longitude, locationName: memory.location_name,
         createdAt: memory.created_at,
       })),
     });
@@ -674,6 +686,7 @@ async function startServer() {
 
   // Add persistent friend requests to existing databases without resetting their data.
   await pool.query(FRIEND_REQUESTS_SCHEMA);
+  await ensureMemoryLocationSchema(pool);
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`API running on port ${PORT}`);
@@ -753,7 +766,9 @@ app.delete("/api/capsules/:id", authenticateUser, async (req, res) => {
   }
 });
 
-startServer().catch((error) => {
+module.exports = {app, setPool: value => { pool = value; }};
+
+if (require.main === module) startServer().catch((error) => {
   console.error("Failed to start API:", error.message);
   process.exit(1);
 });

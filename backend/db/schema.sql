@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS messages (
     user_id BIGINT NOT NULL,
     content TEXT NOT NULL,
     photo_data LONGTEXT,
+    latitude DOUBLE NULL,
+    longitude DOUBLE NULL,
+    location_name VARCHAR(500) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (capsule_id) REFERENCES capsules(id),
     FOREIGN KEY (user_id) REFERENCES app_users(id)

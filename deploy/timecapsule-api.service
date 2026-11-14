@@ -1,0 +1,20 @@
+[Unit]
+Description=Time Capsule Profile Spring Boot API
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=timecapsule
+Group=timecapsule
+WorkingDirectory=/opt/timecapsule/backend
+EnvironmentFile=/etc/timecapsule/api.env
+ExecStart=/usr/bin/java -jar /opt/timecapsule/backend/profile-api.jar
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

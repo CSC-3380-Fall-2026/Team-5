@@ -1,7 +1,7 @@
 ﻿import React, { useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScrollView,Text, StyleSheet,View, TouchableOpacity} from 'react-native';
+import { ScrollView,Text, StyleSheet,View, TouchableOpacity, Image,} from 'react-native';
 import CapsuleCard from '../components/CapsuleCard';
 import { useCapsules } from '../context/CapsuleContext';
 import DataState from '../components/DataState';
@@ -22,13 +22,16 @@ function HomeScreen({ navigation }: any) {
   <SafeAreaView style={styles.safeArea}>
     <ScrollView style={styles.container}>
         <View style={styles.header}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoIcon}>✉</Text>
-        </View>
+      <Image
+        source={require('../assets/logos/time_capsule_logo.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
 
-        <Text style={styles.title}>TIME CAPSULE</Text>
-        <Text style={styles.subtitle}>Your memories, all in one place.</Text>
-      </View>
+      <Text style={styles.subtitle}>
+        Your memories, all in one place.
+      </Text>
+    </View>
 
             <View style={styles.menu}>
         <TouchableOpacity
@@ -112,39 +115,18 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    alignItems: 'center',
-    marginTop: 15,
-    marginBottom: 28,
-  },
-
-  logoCircle: {
-    width: 65,
-    height: 65,
-    borderRadius: 35,
-    backgroundColor: '#735641',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-
-  logoIcon: {
-    fontSize: 30,
-    color: '#FFF5E8',
-  },
-
-  title: {
-    fontSize: 27,
-    fontWeight: '800',
-    color: '#50382B',
-    letterSpacing: 2,
-  },
+  alignItems: 'center',
+  marginTop: 10,
+  marginBottom: 18,
+},
 
   subtitle: {
-    fontSize: 14,
-    color: '#806A58',
-    marginTop: 6,
-    fontStyle: 'italic',
-  },
+  fontSize: 14,
+  color: '#806A58',
+  marginTop: 1,
+  fontStyle: 'italic',
+  textAlign: 'center',
+},
 
   feedCard: {
   backgroundColor: '#F8F0E3',
@@ -186,6 +168,12 @@ menuButtonText: {
 safeArea: {
   flex: 1,
   backgroundColor: '#E8D8BE',
+},
+logo: {
+  width: 180,
+  height: 120,
+  alignSelf: 'center',
+  marginBottom: -5,
 },
 });
 

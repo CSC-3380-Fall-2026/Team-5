@@ -1,7 +1,10 @@
 ﻿import React from 'react';
 import {View,Text,StyleSheet, TouchableOpacity,} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import type { AndroidWebViewProps } from 'react-native-webview/lib/WebViewTypes';
+import type { ComponentType } from 'react';
+const AndroidMapWebView = WebView as unknown as ComponentType<AndroidWebViewProps>;
 
 const mapHTML = `
 <!DOCTYPE html>
@@ -47,12 +50,40 @@ const mapHTML = `
         attribution: '&copy; OpenStreetMap contributors'
       }
     ).addTo(map);
+    let selectedMarker = null;
+
+  map.on('click', function (event) {
+    const latitude = event.latlng.lat;
+    const longitude = event.latlng.lng;
+
+  if (selectedMarker) {
+    map.removeLayer(selectedMarker);
+  }
+
+  selectedMarker = L.marker([latitude, longitude])
+    .addTo(map)
+    .bindPopup('Selected location')
+    .openPopup();
+
+  window.ReactNativeWebView.postMessage(
+    JSON.stringify({
+      type: 'LOCATION_SELECTED',
+      latitude,
+      longitude,
+    })
+  );
+});
   </script>
 </body>
 </html>
 `;
 
-function MemoryMapScreen({ navigation }: any) {
+function MemoryMapScreen({ navigation, route }: any) {
+  const isSelectingLocation = route?.params?.mode === 'select';
+  const [selectedLocation, setSelectedLocation] = React.useState<{
+  latitude: number;
+  longitude: number;
+} | null>(null);
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -74,14 +105,51 @@ function MemoryMapScreen({ navigation }: any) {
         </View>
 
         <View style={styles.mapContainer}>
-          <WebView
+          <AndroidMapWebView
             originWhitelist={['*']}
             source={{ html: mapHTML }}
             style={styles.map}
             javaScriptEnabled={true}
             domStorageEnabled={true}
-          />
-        </View>
+            onMessage={(event: WebViewMessageEvent): void => {
+          if (!isSelectingLocation) return;
+
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+
+
+          if (data.type === 'LOCATION_SELECTED') {
+            setSelectedLocation({
+              latitude: data.latitude,
+              longitude: data.longitude,
+          });
+        }
+      } catch (error) {
+        console.log('Map message error:', error);
+      }
+    }}
+  />
+    </View>
+    {isSelectingLocation && (
+  <TouchableOpacity
+    style={[
+      styles.confirmButton,
+      !selectedLocation && { opacity: 0.5 },
+    ]}
+    disabled={!selectedLocation}
+    onPress={() => {
+      if (!selectedLocation) return;
+
+      route.params?.onSelectLocation?.(selectedLocation);
+
+      navigation.goBack();
+    }}
+  >
+    <Text style={styles.confirmButtonText}>
+      CONFIRM LOCATION
+    </Text>
+  </TouchableOpacity>
+)}
 
         {/* Placeholder content */}
         <View style={styles.emptyCard}>
@@ -178,6 +246,21 @@ const styles = StyleSheet.create({
     color: '#806A58',
     textAlign: 'center',
   },
+  confirmButton: {
+  backgroundColor: '#735641',
+  height: 54,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+
+confirmButtonText: {
+  color: '#FFFFFF',
+  fontSize: 15,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
 });
 
 export default MemoryMapScreen;

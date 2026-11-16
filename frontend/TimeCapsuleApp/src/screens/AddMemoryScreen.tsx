@@ -110,7 +110,8 @@ function AddMemoryScreen({ route, navigation }: any) {
 <TouchableOpacity
   style={styles.locationButton}
   onPress={() =>
-    navigation.navigate('LocationPicker', {
+    navigation.navigate('MemoryMap', {
+      mode: 'select',
       onSelectLocation: (selectedLocation: {
         latitude: number;
         longitude: number;

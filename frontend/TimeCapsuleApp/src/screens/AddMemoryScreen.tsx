@@ -1,51 +1,135 @@
 import React, { useState } from 'react';
-import {View, Text, TextInput, StyleSheet, Image, ScrollView, TouchableOpacity,} from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
-
+import {
+  validateMemory,
+  hasErrors,
+  MemoryErrors,
+} from '../utils/memoryValidation';
+import { API_BASE_URL } from '../services/api';
+import { getAuthToken } from '../services/authStorage';
 import { useCapsules } from '../context/CapsuleContext';
+
+import MemoryLocationPicker from '../components/MemoryLocationPicker';
+import {MemoryLocation} from '../utils/memoryMap';
 
 function AddMemoryScreen({ route, navigation }: any) {
   const [memoryText, setMemoryText] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoData, setPhotoData] = useState<string | null>(null);
+  const [errors, setErrors] = useState<MemoryErrors>({});
+  const [uploading, setUploading] = useState(false);
 
   const { capsule } = route.params;
   const { addMemory } = useCapsules();
-  const [location, setLocation] = useState<{
-    latitude: number;
-    longitude: number;
-} | null>(null);
+  const [location, setLocation] = useState<MemoryLocation | null>(null);
+  const [pickingLocation, setPickingLocation] = useState(false);
 
   // Opens the phone's photo library
   async function choosePhoto() {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-    });
+  const result = await launchImageLibrary({
+    mediaType: 'photo',
+    includeBase64: true,
+    maxWidth: 1200,
+    maxHeight: 1200,
+    quality: 0.7,
+  });
 
     const selectedPhoto = result.assets?.[0];
 
     if (selectedPhoto?.uri) {
+      if (!selectedPhoto.base64) {
+        Alert.alert('Photo unavailable', 'Please choose another photo so it can be saved with your memory.');
+        return;
+      }
       setPhotoUri(selectedPhoto.uri);
+
+      if (selectedPhoto.base64) {
+        const imageType = selectedPhoto.type ?? 'image/jpeg';
+
+        setPhotoData(
+          `data:${imageType};base64,${selectedPhoto.base64}`,
+        );
+      }
+
+      // A photo was chosen, so clear the photo error
+      setErrors(current => ({
+        ...current,
+        photo: undefined,
+      }));
     }
   }
 
   // Saves the new memory to the selected capsule
-  function handleAddMemory() {
-    if (memoryText.trim() === '' || photoUri === null) {
+  async function handleAddMemory() {
+    // Check the form first; stop and show messages if something is missing
+    const validationErrors = validateMemory(
+      memoryText,
+      photoUri,
+    );
+
+    setErrors(validationErrors);
+
+    if (hasErrors(validationErrors)) {
       return;
     }
+    setUploading(true);
 
-    const newMemory = {
-      id: Date.now().toString(),
-      text: memoryText.trim(),
-      photoUri,
-      latitude: location?.latitude ?? null,
-      longitude: location?.longitude ?? null,
-    };
+    try {
+      const token = await getAuthToken();
 
-    addMemory(capsule.id, newMemory);
+      if (!token) { throw new Error('Please log in again before saving.'); }
 
-    navigation.goBack();
+      const response = await fetch(
+        `${API_BASE_URL}/api/capsules/${capsule.id}/memories`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            content: memoryText.trim(),
+            photoData,
+            latitude: location?.latitude ?? null,
+            longitude: location?.longitude ?? null,
+            locationName: location?.locationName ?? null,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to save memory.');
+      }
+
+      const newMemory = {
+        id: data.memory.id,
+        text: data.memory.content,
+        photoUri: photoData ?? photoUri ?? '',
+        ...location,
+      };
+
+      addMemory(capsule.id, newMemory);
+
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Unable to save memory', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+    setUploading(false);
+    }
   }
 
   return (
@@ -56,12 +140,16 @@ function AddMemoryScreen({ route, navigation }: any) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>
+            ← Back
+          </Text>
         </TouchableOpacity>
 
         {/* Page heading */}
         <View style={styles.header}>
-          <Text style={styles.title}>ADD MEMORY</Text>
+          <Text style={styles.title}>
+            ADD MEMORY
+          </Text>
 
           <Text style={styles.subtitle}>
             Adding to: {capsule.name}
@@ -69,19 +157,41 @@ function AddMemoryScreen({ route, navigation }: any) {
         </View>
 
         {/* Memory text */}
-        <Text style={styles.label}>MEMORY</Text>
+        <Text style={styles.label}>
+          MEMORY
+        </Text>
 
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            errors.text ? styles.inputError : null,
+          ]}
           placeholder="Write a memory..."
           placeholderTextColor="#9A8A7A"
           value={memoryText}
-          onChangeText={setMemoryText}
+          onChangeText={value => {
+            setMemoryText(value);
+
+            if (errors.text) {
+              setErrors(current => ({
+                ...current,
+                text: undefined,
+              }));
+            }
+          }}
           multiline
         />
 
+        {errors.text ? (
+          <Text style={styles.error}>
+            {errors.text}
+          </Text>
+        ) : null}
+
         {/* Photo selection */}
-        <Text style={styles.label}>PHOTO</Text>
+        <Text style={styles.label}>
+          PHOTO
+        </Text>
 
         <TouchableOpacity
           style={styles.photoButton}
@@ -91,6 +201,12 @@ function AddMemoryScreen({ route, navigation }: any) {
             CHOOSE PHOTO
           </Text>
         </TouchableOpacity>
+
+        {errors.photo ? (
+          <Text style={styles.error}>
+            {errors.photo}
+          </Text>
+        ) : null}
 
         {/* Selected photo preview */}
         {photoUri ? (
@@ -128,19 +244,39 @@ function AddMemoryScreen({ route, navigation }: any) {
 
 <Text style={styles.locationHint}>
   {location
-    ? `Location selected: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+    ? location.locationName || `Location selected: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
     : 'No location selected yet.'}
 </Text>
 
+        {location && <TouchableOpacity onPress={() => setLocation(null)}><Text style={styles.locationHint}>Remove location</Text></TouchableOpacity>}
+        {pickingLocation && <MemoryLocationPicker initial={location} onClose={() => setPickingLocation(false)} onSave={point => {setLocation(point);setPickingLocation(false);}} />}
+
         {/* Save memory */}
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleAddMemory}
-        >
-          <Text style={styles.addButtonText}>
-            ADD MEMORY
-          </Text>
-        </TouchableOpacity>
+  style={[
+    styles.addButton,
+    uploading ? styles.addButtonDisabled : null,
+  ]}
+  onPress={handleAddMemory}
+  disabled={uploading}
+>
+  {uploading ? (
+    <View style={styles.uploadingRow}>
+      <ActivityIndicator
+        size="small"
+        color="#FFFFFF"
+      />
+
+      <Text style={styles.addButtonText}>
+        UPLOADING MEMORY...
+      </Text>
+    </View>
+  ) : (
+    <Text style={styles.addButtonText}>
+      ADD MEMORY
+    </Text>
+  )}
+</TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -151,6 +287,17 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#E8D8BE',
+  },
+
+  // Validation messages
+  error: {
+    color: '#c62828',
+    marginTop: 6,
+    marginBottom: 12,
+  },
+
+  inputError: {
+    borderColor: '#c62828',
   },
 
   container: {
@@ -294,6 +441,14 @@ locationHint: {
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  addButtonDisabled: {
+    opacity: 0.6,
+  },
+  uploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
 });
 

@@ -1,5 +1,11 @@
-﻿import React from 'react';
-import {View,Text,StyleSheet, TouchableOpacity,} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { AndroidWebViewProps } from 'react-native-webview/lib/WebViewTypes';
@@ -87,23 +93,18 @@ function MemoryMapScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Back button */}
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-
-        {/* Page heading */}
         <View style={styles.header}>
           <Text style={styles.title}>MEMORY MAP</Text>
-
           <Text style={styles.subtitle}>
             See where your favorite memories were made.
           </Text>
         </View>
-
         <View style={styles.mapContainer}>
           <AndroidMapWebView
             originWhitelist={['*']}
@@ -161,6 +162,26 @@ function MemoryMapScreen({ navigation, route }: any) {
             Locations connected to your memories will appear here.
           </Text>
         </View>
+        {loading ? (
+          <ActivityIndicator color="#735641" />
+        ) : error ? (
+          <TouchableOpacity onPress={() => setRevision(n => n + 1)}>
+            <Text style={styles.emptyText}>{error} Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>
+              {memories.length
+                ? `${memories.length} memories on the map`
+                : 'No opened memories on the map yet'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {memories.length
+                ? 'Tap a pin to see photos and open the linked memory.'
+                : 'Add a location when saving a memory. Its photo and pin appear after the capsule opens.'}
+            </Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -192,7 +213,7 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 14,
   },
 
   title: {

@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs");
 const crypto = require("node:crypto");
 const jwt = require("jsonwebtoken");
 const { FRIEND_REQUESTS_SCHEMA, registerFriendRoutes } = require("./friends");
-const { registerDirectMessageRoutes } = require("./directMessages");
+const { registerDirectMessageRoutes, DIRECT_MESSAGES_SCHEMA } = require("./directMessages");
 
 const {
   loadEnvironment,
@@ -878,6 +878,7 @@ async function startServer() {
 
   // Add persistent friend requests to existing databases without resetting their data.
   await pool.query(FRIEND_REQUESTS_SCHEMA);
+  await pool.query(DIRECT_MESSAGES_SCHEMA);
   await ensureMemoryLocationSchema(pool);
 
   app.listen(PORT, "0.0.0.0", () => {

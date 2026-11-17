@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test friends.test.js memoryMap.test.js",
+    "test": "node --test friends.test.js memoryMap.test.js directMessages.test.js",
     "seed": "node scripts/seed.js",
     "setup": "node scripts/init-db.js && node scripts/setup.js",
     "setup:local": "node scripts/setup.js --skip-db"

@@ -819,6 +819,113 @@ app.get("/api/capsules/:id/memories", authenticateUser, async (req, res) => {
     });
   }
 });
+
+// Edits a memory's text. Only the memory's author can edit it.
+app.put(
+  "/api/capsules/:capsuleId/memories/:memoryId",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { capsuleId, memoryId } = req.params;
+      const { content } = req.body ?? {};
+
+      if (typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({
+          error: "Memory text is required.",
+        });
+      }
+
+      const [memories] = await pool.execute(
+        `SELECT id, user_id
+         FROM messages
+         WHERE id = ? AND capsule_id = ?
+         LIMIT 1`,
+        [memoryId, capsuleId]
+      );
+
+      if (memories.length === 0) {
+        return res.status(404).json({
+          error: "Memory not found.",
+        });
+      }
+
+      if (String(memories[0].user_id) !== String(req.userId)) {
+        return res.status(403).json({
+          error: "You can only edit your own memories.",
+        });
+      }
+
+      await pool.execute(
+        `UPDATE messages SET content = ? WHERE id = ?`,
+        [content.trim(), memoryId]
+      );
+      
+      return res.json({
+        message: "Memory updated successfully.",
+        memory: {
+          id: String(memoryId),
+          capsuleId: String(capsuleId),
+          content: content.trim(),
+        },
+      });
+    } catch (error) {
+      console.error("Memory update failed:", error);
+
+      return res.status(500).json({
+        error: "Unable to update memory.",
+      });
+    }
+  }
+);
+
+// Deletes a memory. The author or the capsule creator can delete it.
+app.delete(
+  "/api/capsules/:capsuleId/memories/:memoryId",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { capsuleId, memoryId } = req.params;
+
+      const [memories] = await pool.execute(
+        `SELECT messages.id, messages.user_id, capsules.created_by
+         FROM messages
+         INNER JOIN capsules ON messages.capsule_id = capsules.id
+         WHERE messages.id = ? AND messages.capsule_id = ?
+         LIMIT 1`,
+        [memoryId, capsuleId]
+      );
+
+      if (memories.length === 0) {
+        return res.status(404).json({
+          error: "Memory not found.",
+        });
+      }
+
+      const isAuthor = String(memories[0].user_id) === String(req.userId);
+      const isCapsuleCreator =
+        String(memories[0].created_by) === String(req.userId);
+
+      if (!isAuthor && !isCapsuleCreator) {
+        return res.status(403).json({
+          error: "You do not have permission to delete this memory.",
+        });
+      }
+
+      await pool.execute(`DELETE FROM messages WHERE id = ?`, [memoryId]);
+
+      return res.json({
+        message: "Memory deleted successfully.",
+      });
+    } catch (error) {
+      console.error("Memory deletion failed:", error);
+
+      return res.status(500).json({
+        error: "Unable to delete memory.",
+      });
+    }
+  }
+);
+
 // Permanently unlocks a capsule for testing/demo purposes
 app.patch(
   "/api/capsules/:id/unlock-now",

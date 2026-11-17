@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {loadCapsuleMemories} from '../services/memories';
 import {
@@ -8,12 +8,20 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  TextInput,
+  Alert,
     Modal as ReactNativeModal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 
-import { API_BASE_URL } from '../services/api';
+import {
+  API_BASE_URL,
+  getProfile,
+  updateMemory,
+  deleteMemory,
+} from '../services/api';
+
 import { getAuthToken } from '../services/authStorage';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
@@ -71,6 +79,72 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
   const [modalMessage, setModalMessage] = useState('');
   const [deleteAfterClose, setDeleteAfterClose] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+
+  // Edit/delete memory state
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [editingMemory, setEditingMemory] = useState<Memory | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Remember who is logged in so buttons only show on their own memories
+  useEffect(() => {
+    getProfile()
+      .then(user => setCurrentUserId(user.id))
+      .catch(() => setCurrentUserId(null));
+  }, []);
+
+  function startEdit(memory: Memory) {
+    setEditingMemory(memory);
+    setEditText(memory.text);
+    setEditError('');
+  }
+
+  async function saveEdit() {
+    if (!editingMemory) {
+      return;
+    }
+    if (!editText.trim()) {
+      setEditError('Memory text cannot be empty.');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await updateMemory(capsule.id, editingMemory.id, editText.trim());
+
+      setEditingMemory(null);
+      setRefresh(n => n + 1);
+    } catch (error) {
+      setEditError(
+        error instanceof Error ? error.message : 'Unable to update memory.',
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  function confirmDeleteMemory(memory: Memory) {
+    Alert.alert('Delete Memory', 'This cannot be undone. Delete this memory?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteMemory(capsule.id, memory.id);
+            setRefresh(n => n + 1);
+          } catch (error) {
+            Alert.alert(
+              'Delete Failed',
+              error instanceof Error ? error.message : 'Unable to delete memory.',
+            );
+          }
+        },
+      },
+    ]);
+  }
+
   // Deletes this capsule from the backend
   async function deleteCapsule() {
     try {
@@ -156,6 +230,17 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
             style={styles.memoryPhoto}
           />
         ) : null}
+
+        {!!currentUserId && memory.userId === currentUserId && (
+          <View style={styles.memoryActions}>
+            <TouchableOpacity onPress={() => startEdit(memory)}>
+              <Text style={styles.editLinkText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => confirmDeleteMemory(memory)}>
+              <Text style={styles.deleteLinkText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     ));
   }
@@ -348,47 +433,48 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
             {modalMessage}
           </Text>
         </Modal>
-        <ReactNativeModal
-  visible={deleteConfirmVisible}
-  transparent={true}
-  animationType="fade"
-  onRequestClose={() => setDeleteConfirmVisible(false)}
->
-  <View style={styles.confirmOverlay}>
-    <View style={styles.confirmBox}>
-      <Text style={styles.confirmTitle}>
-        Delete Capsule
-      </Text>
-
-      <Text style={styles.confirmMessage}>
-        Are you sure you want to delete this capsule?
-      </Text>
-
-      <View style={styles.confirmButtons}>
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => setDeleteConfirmVisible(false)}
+         <ReactNativeModal
+          visible={!!editingMemory}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setEditingMemory(null)}
         >
-          <Text style={styles.cancelButtonText}>
-            CANCEL
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.confirmOverlay}>
+            <View style={styles.confirmBox}>
+              <Text style={styles.confirmTitle}>Edit Memory</Text>
 
-        <TouchableOpacity
-          style={styles.confirmDeleteButton}
-          onPress={() => {
-            setDeleteConfirmVisible(false);
-            deleteCapsule();
-          }}
-        >
-          <Text style={styles.confirmDeleteButtonText}>
-            DELETE
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</ReactNativeModal>
+              <TextInput
+                style={styles.editInput}
+                multiline
+                value={editText}
+                onChangeText={setEditText}
+              />
+
+              {!!editError && (
+                <Text style={styles.editErrorText}>{editError}</Text>
+              )}
+
+              <View style={styles.confirmButtons}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setEditingMemory(null)}
+                >
+                  <Text style={styles.cancelButtonText}>CANCEL</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.saveEditButton}
+                  onPress={saveEdit}
+                  disabled={savingEdit}
+                >
+                  <Text style={styles.confirmDeleteButtonText}>
+                    {savingEdit ? 'SAVING...' : 'SAVE'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </ReactNativeModal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -642,6 +728,50 @@ testUnlockLinkText: {
   fontSize: 12,
   textDecorationLine: 'underline',
 },
+
+memoryActions: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 10,
+  },
+
+  editLinkText: {
+    color: '#735641',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  deleteLinkText: {
+    color: '#A64B3C',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  editInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFA88D',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    color: '#50382B',
+    marginBottom: 12,
+  },
+
+  editErrorText: {
+    color: '#A64B3C',
+    marginBottom: 12,
+  },
+
+  saveEditButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#735641',
+  },
 });
 
 export default CapsuleDetailsScreen;

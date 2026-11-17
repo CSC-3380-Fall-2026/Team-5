@@ -69,7 +69,7 @@ export async function getProfile() {
   if (!response.ok) {
     throw new Error(data.error || 'Unable to load profile.');
   }
-  return data.user as { name: string; bio: string | null; email: string };
+  return data.user as { id: string; name: string; bio: string | null; email: string };
 }
 
 export async function updateProfile(name: string, bio: string) {
@@ -85,6 +85,46 @@ export async function updateProfile(name: string, bio: string) {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || 'Unable to update profile.');
+  }
+  return data;
+}
+
+export async function updateMemory(
+  capsuleId: string,
+  memoryId: string,
+  content: string,
+) {
+  const token = await getToken();
+  const response = await fetch(
+    `${API_BASE_URL}/api/capsules/${capsuleId}/memories/${memoryId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Unable to update memory.');
+  }
+  return data;
+}
+
+export async function deleteMemory(capsuleId: string, memoryId: string) {
+  const token = await getToken();
+  const response = await fetch(
+    `${API_BASE_URL}/api/capsules/${capsuleId}/memories/${memoryId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Unable to delete memory.');
   }
   return data;
 }

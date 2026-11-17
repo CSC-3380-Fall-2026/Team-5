@@ -112,7 +112,6 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
     setSavingEdit(true);
     try {
       await updateMemory(capsule.id, editingMemory.id, editText.trim());
-
       setEditingMemory(null);
       setRefresh(n => n + 1);
     } catch (error) {
@@ -433,7 +432,48 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
             {modalMessage}
           </Text>
         </Modal>
-         <ReactNativeModal
+        <ReactNativeModal
+  visible={deleteConfirmVisible}
+  transparent={true}
+  animationType="fade"
+  onRequestClose={() => setDeleteConfirmVisible(false)}
+>
+  <View style={styles.confirmOverlay}>
+    <View style={styles.confirmBox}>
+      <Text style={styles.confirmTitle}>
+        Delete Capsule
+      </Text>
+
+      <Text style={styles.confirmMessage}>
+        Are you sure you want to delete this capsule?
+      </Text>
+
+      <View style={styles.confirmButtons}>
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={() => setDeleteConfirmVisible(false)}
+        >
+          <Text style={styles.cancelButtonText}>
+            CANCEL
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.confirmDeleteButton}
+          onPress={() => {
+            setDeleteConfirmVisible(false);
+            deleteCapsule();
+          }}
+        >
+          <Text style={styles.confirmDeleteButtonText}>
+            DELETE
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</ReactNativeModal>
+<ReactNativeModal
           visible={!!editingMemory}
           transparent={true}
           animationType="fade"

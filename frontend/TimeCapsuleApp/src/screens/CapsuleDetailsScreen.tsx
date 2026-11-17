@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import {useFocusEffect} from '@react-navigation/native';
+import {loadCapsuleMemories} from '../services/memories';
 import {
   View,
   Text,
@@ -10,33 +12,65 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { isCapsuleLocked } from '../utils/capsuleLock';
+
 import { API_BASE_URL } from '../services/api';
 import { getAuthToken } from '../services/authStorage';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
-import { useCapsules } from '../context/CapsuleContext';
+import {
+  Capsule,
+  Memory,
+  useCapsules,
+} from '../context/CapsuleContext';
 
 function CapsuleDetailsScreen({ route, navigation }: any) {
   const { capsule: routeCapsule } = route.params;
-  const { capsules } = useCapsules();
-
+  const { capsules, reload } = useCapsules();
+  
   // Gets the newest version of the capsule from context
-  const capsule =
-    capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
+  const capsule: Capsule =
+  capsules.find(item => item.id === routeCapsule.id) ?? routeCapsule;
 
-  const memories = capsule.memories ?? [];
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [loadingMemories, setLoadingMemories] = useState(true);
+  const [memoryError, setMemoryError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+
+  // Replace from the server on focus/unlock; never keep a permanent "already loaded" ID set.
+  useFocusEffect(useCallback(() => {
+    const controller = new AbortController();
+    let inFlight = false;
+    setMemories([]);
+    setIsUnlocked(false);
+    setLoadingMemories(true);
+    setMemoryError('');
+    async function load() {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await loadCapsuleMemories(capsule.id, controller.signal);
+        if (controller.signal.aborted) return;
+        setMemories(result.memories);
+        setIsUnlocked(!result.locked);
+        setMemoryError('');
+      } catch (error) {
+        if (!controller.signal.aborted) setMemoryError(error instanceof Error ? error.message : 'Unable to load memories.');
+      } finally {
+        inFlight = false;
+        if (!controller.signal.aborted) setLoadingMemories(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 15000);
+    return () => {controller.abort(); clearInterval(timer);};
+  }, [capsule.id, refresh]));
 
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [deleteAfterClose, setDeleteAfterClose] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-
-  // Uses the shared capsule 
-  // lock helper so every screen follows the same unlock rules
-  const isUnlocked = !isCapsuleLocked(capsule.unlockDate);
-
   // Deletes this capsule from the backend
   async function deleteCapsule() {
     try {
@@ -89,16 +123,16 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
 
   // Controls what is shown in the memories section
   function renderMemories() {
-    // Locked capsules only show how many memories were added
+    if (loadingMemories) return <Text style={styles.value}>Loading memories...</Text>;
+    if (memoryError) return <TouchableOpacity onPress={() => setRefresh(n => n + 1)}><Text style={styles.value}>{memoryError} Tap to retry.</Text></TouchableOpacity>;
     if (!isUnlocked) {
       return (
         <Text style={styles.value}>
-          {memories.length} memories added
+          {capsule.memoryCount ?? memories.length} memories added
         </Text>
       );
     }
 
-    // Unlocked capsule with no memories
     if (memories.length === 0) {
       return (
         <Text style={styles.value}>
@@ -107,25 +141,23 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
       );
     }
 
-    // Unlocked capsule displays the saved memories and photos
-    return memories.map(
-      (memory: {
-        id: string;
-        text: string;
-        photoUri: string;
-      }) => (
-        <View key={memory.id} style={styles.memory}>
-          <Text style={styles.memoryText}>
-            {memory.text}
-          </Text>
+    const ordered = [...memories].sort((a, b) => Number(b.id === route.params.memoryId) - Number(a.id === route.params.memoryId));
+    return ordered.map(memory => (
+      <View key={memory.id} style={styles.memory}>
+        {memory.id === route.params.memoryId && <Text style={styles.label}>SELECTED MAP MEMORY</Text>}
+        {!!memory.locationName && <Text style={styles.value}>{memory.locationName}</Text>}
+        <Text style={styles.memoryText}>
+          {memory.text}
+        </Text>
 
+        {memory.photoUri ? (
           <Image
             source={{ uri: memory.photoUri }}
             style={styles.memoryPhoto}
           />
-        </View>
-      ),
-    );
+        ) : null}
+      </View>
+    ));
   }
 
   return (
@@ -185,7 +217,7 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
                 styles.statusText,
               ]}
             >
-              {isUnlocked ? 'Unlocked' : 'Locked'}
+              {loadingMemories ? 'Checking...' : isUnlocked ? 'Unlocked' : 'Locked'}
             </Text>
           </View>
 
@@ -225,20 +257,23 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
 
             {renderMemories()}
           </View>
+          
 
           {/* Opens Add Memory */}
-          <TouchableOpacity
-            style={styles.addMemoryButton}
-            onPress={() =>
-              navigation.navigate('AddMemory', {
-                capsule,
-              })
-            }
-          >
-            <Text style={styles.addMemoryButtonText}>
-              ADD MEMORY
-            </Text>
-          </TouchableOpacity>
+          {!loadingMemories && !memoryError && !isUnlocked && (
+            <TouchableOpacity
+              style={styles.addMemoryButton}
+              onPress={() =>
+                navigation.navigate('AddMemory', {
+                  capsule,
+                })
+              }
+            >
+              <Text style={styles.addMemoryButtonText}>
+                ADD MEMORY
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Deletes the capsule */}
           <TouchableOpacity
@@ -249,6 +284,52 @@ function CapsuleDetailsScreen({ route, navigation }: any) {
               DELETE CAPSULE
             </Text>
           </TouchableOpacity>
+          {!loadingMemories && !memoryError && !isUnlocked && (
+      <TouchableOpacity
+        style={styles.testUnlockLink}
+        onPress={async () => {
+          try {
+            const token = await getAuthToken();
+
+            if (!token) {
+              return;
+            }
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/capsules/${capsule.id}/unlock-now`,
+              {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              console.error(
+                'Unable to unlock capsule:',
+                data.error,
+              );
+              return;
+            }
+
+            await reload();
+            setRefresh(n => n + 1);
+          } catch (error) {
+            console.error(
+              'Unlock capsule error:',
+              error,
+            );
+          }
+        }}
+      >
+    <Text style={styles.testUnlockLinkText}>
+      Unlock now for testing
+    </Text>
+  </TouchableOpacity>
+)}
         </Card>
 
         <Modal
@@ -532,6 +613,34 @@ confirmDeleteButtonText: {
   color: '#FFFFFF',
   fontSize: 14,
   fontWeight: '800',
+},
+testUnlockButton: {
+  height: 48,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: '#BFA88D',
+  backgroundColor: '#FFF9F0',
+},
+
+testUnlockButtonText: {
+  color: '#735641',
+  fontSize: 14,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
+testUnlockLink: {
+  alignSelf: 'center',
+  marginTop: 10,
+  paddingVertical: 4,
+},
+
+testUnlockLinkText: {
+  color: '#806A58',
+  fontSize: 12,
+  textDecorationLine: 'underline',
 },
 });
 

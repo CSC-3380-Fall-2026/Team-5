@@ -27,7 +27,10 @@ function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
           <LockedCapsuleView
             name={capsule.name}
             unlockDate={capsule.unlockDate}
-            memoryCount={capsule.memories?.length ?? 0}
+            memoryCount={
+              capsule.memoryCount ?? capsule.memories?.length ?? 0
+            
+          }
           />
         ) : (
           <>
@@ -39,15 +42,16 @@ function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
               Opens: {capsule.unlockDate}
             </Text>
 
-            {/* Number of friends */}
-            <Text style={styles.detailText}>
-              Friends: {capsule.friends.length}
-            </Text>
-
             {/* Capsule status */}
             <Text style={styles.status}>Unlocked</Text>
           </>
         )}
+        {/* Show friend names for both locked and unlocked capsules. */}
+        <Text style={styles.detailText}>
+          {capsule.friends.length > 0
+            ? 'Friends: ' + capsule.friends.join(', ')
+            : 'No friends added'}
+        </Text>
       </Card>
     </Pressable>
   );

@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 
 export default function LoginScreen() {
@@ -98,18 +99,18 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.card}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoIcon}>✉</Text>
-            </View>
+       <View style={styles.card}>
+        <Image
+          source={require('../../assets/logos/time_capsule_logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
 
-            <Text style={styles.title}>TIME CAPSULE</Text>
+        <Text style={styles.subtitle}>
+          Memories worth keeping.
+        </Text>
 
-            <Text style={styles.subtitle}>
-              Memories worth keeping.
-            </Text>
-
-            <View style={styles.divider} />
+        <View style={styles.divider} />
 
             <Text style={styles.welcome}>
               Welcome Back!
@@ -237,37 +238,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-  logoCircle: {
-    width: 75,
-    height: 75,
-    borderRadius: 40,
-    backgroundColor: '#735641',
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginBottom: 18,
-  },
-
-  logoIcon: {
-    fontSize: 36,
-    color: '#FFF5E8',
-  },
-
-  title: {
-    fontSize: 29,
-    fontWeight: '800',
-    color: '#50382B',
-    textAlign: 'center',
-    letterSpacing: 2,
-  },
-
   subtitle: {
-    fontSize: 14,
-    color: '#806A58',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
+  fontSize: 14,
+  color: '#806A58',
+  textAlign: 'center',
+  marginTop: 0,
+  fontStyle: 'italic',
+},
 
   divider: {
     height: 1,
@@ -382,4 +359,10 @@ const styles = StyleSheet.create({
     color: '#806A58',
     lineHeight: 22,
   },
+  logo: {
+  width: 120,
+  height: 120,
+  alignSelf: 'center',
+  marginBottom: 0,
+},
 });

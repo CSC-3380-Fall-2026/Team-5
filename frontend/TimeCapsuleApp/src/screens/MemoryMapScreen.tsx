@@ -1,27 +1,156 @@
-﻿import React from 'react';
-import {View,Text,StyleSheet, TouchableOpacity,} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import type { AndroidWebViewProps } from 'react-native-webview/lib/WebViewTypes';
+import type { ComponentType } from 'react';
+const AndroidMapWebView = WebView as unknown as ComponentType<AndroidWebViewProps>;
 
-function MemoryMapScreen({ navigation }: any) {
+const mapHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0" />
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+      background: #F8F0E3;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const map = L.map('map').setView(
+      [30.4515, -91.1871],
+      12
+    );
+
+    L.tileLayer(
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }
+    ).addTo(map);
+    let selectedMarker = null;
+
+  map.on('click', function (event) {
+    const latitude = event.latlng.lat;
+    const longitude = event.latlng.lng;
+
+  if (selectedMarker) {
+    map.removeLayer(selectedMarker);
+  }
+
+  selectedMarker = L.marker([latitude, longitude])
+    .addTo(map)
+    .bindPopup('Selected location')
+    .openPopup();
+
+  window.ReactNativeWebView.postMessage(
+    JSON.stringify({
+      type: 'LOCATION_SELECTED',
+      latitude,
+      longitude,
+    })
+  );
+});
+  </script>
+</body>
+</html>
+`;
+
+function MemoryMapScreen({ navigation, route }: any) {
+  const isSelectingLocation = route?.params?.mode === 'select';
+  const [selectedLocation, setSelectedLocation] = React.useState<{
+  latitude: number;
+  longitude: number;
+} | null>(null);
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Back button */}
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-
-        {/* Page heading */}
         <View style={styles.header}>
           <Text style={styles.title}>MEMORY MAP</Text>
-
           <Text style={styles.subtitle}>
             See where your favorite memories were made.
           </Text>
         </View>
+        <View style={styles.mapContainer}>
+          <AndroidMapWebView
+            originWhitelist={['*']}
+            source={{ html: mapHTML }}
+            style={styles.map}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            onMessage={(event: WebViewMessageEvent): void => {
+          if (!isSelectingLocation) return;
+
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+
+
+          if (data.type === 'LOCATION_SELECTED') {
+            setSelectedLocation({
+              latitude: data.latitude,
+              longitude: data.longitude,
+          });
+        }
+      } catch (error) {
+        console.log('Map message error:', error);
+      }
+    }}
+  />
+    </View>
+    {isSelectingLocation && (
+  <TouchableOpacity
+    style={[
+      styles.confirmButton,
+      !selectedLocation && { opacity: 0.5 },
+    ]}
+    disabled={!selectedLocation}
+    onPress={() => {
+      if (!selectedLocation) return;
+
+      route.params?.onSelectLocation?.(selectedLocation);
+
+      navigation.goBack();
+    }}
+  >
+    <Text style={styles.confirmButtonText}>
+      CONFIRM LOCATION
+    </Text>
+  </TouchableOpacity>
+)}
 
         {/* Placeholder content */}
         <View style={styles.emptyCard}>
@@ -33,6 +162,26 @@ function MemoryMapScreen({ navigation }: any) {
             Locations connected to your memories will appear here.
           </Text>
         </View>
+        {loading ? (
+          <ActivityIndicator color="#735641" />
+        ) : error ? (
+          <TouchableOpacity onPress={() => setRevision(n => n + 1)}>
+            <Text style={styles.emptyText}>{error} Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>
+              {memories.length
+                ? `${memories.length} memories on the map`
+                : 'No opened memories on the map yet'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {memories.length
+                ? 'Tap a pin to see photos and open the linked memory.'
+                : 'Add a location when saving a memory. Its photo and pin appear after the capsule opens.'}
+            </Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -64,7 +213,7 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 14,
   },
 
   title: {
@@ -81,6 +230,20 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+
+  mapContainer: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#BFA88D',
+    overflow: 'hidden',
+    marginBottom: 20,
+    backgroundColor: '#F8F0E3',
+  },
+
+  map: {
+    flex: 1,
   },
 
   emptyCard: {
@@ -104,6 +267,21 @@ const styles = StyleSheet.create({
     color: '#806A58',
     textAlign: 'center',
   },
+  confirmButton: {
+  backgroundColor: '#735641',
+  height: 54,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+
+confirmButtonText: {
+  color: '#FFFFFF',
+  fontSize: 15,
+  fontWeight: '800',
+  letterSpacing: 1,
+},
 });
 
 export default MemoryMapScreen;

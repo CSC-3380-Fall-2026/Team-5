@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+﻿import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,89 +7,146 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import type { AndroidWebViewProps } from 'react-native-webview/lib/WebViewTypes';
-import type { ComponentType } from 'react';
-const AndroidMapWebView = WebView as unknown as ComponentType<AndroidWebViewProps>;
+import { useFocusEffect } from '@react-navigation/native';
 
-const mapHTML = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0" />
-
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-    }
-
-    #map {
-      height: 100%;
-      width: 100%;
-      background: #F8F0E3;
-    }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <script>
-    const map = L.map('map').setView(
-      [30.4515, -91.1871],
-      12
-    );
-
-    L.tileLayer(
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }
-    ).addTo(map);
-    let selectedMarker = null;
-
-  map.on('click', function (event) {
-    const latitude = event.latlng.lat;
-    const longitude = event.latlng.lng;
-
-  if (selectedMarker) {
-    map.removeLayer(selectedMarker);
-  }
-
-  selectedMarker = L.marker([latitude, longitude])
-    .addTo(map)
-    .bindPopup('Selected location')
-    .openPopup();
-
-  window.ReactNativeWebView.postMessage(
-    JSON.stringify({
-      type: 'LOCATION_SELECTED',
-      latitude,
-      longitude,
-    })
-  );
-});
-  </script>
-</body>
-</html>
-`;
+import MemoryMapView from '../components/MemoryMapView';
+import MemoryLocationPicker from '../components/MemoryLocationPicker';
+import {
+  MapMemory,
+  MemoryLocation,
+  validCoordinates,
+} from '../utils/memoryMap';
+import { useCapsules } from '../context/CapsuleContext';
+import { getAuthToken } from '../services/authStorage';
+import { API_BASE_URL } from '../services/api';
 
 function MemoryMapScreen({ navigation, route }: any) {
   const isSelectingLocation = route?.params?.mode === 'select';
-  const [selectedLocation, setSelectedLocation] = React.useState<{
-  latitude: number;
-  longitude: number;
-} | null>(null);
+
+  const { capsules } = useCapsules();
+
+  const [memories, setMemories] = useState<MapMemory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      void revision;
+      if (isSelectingLocation) {
+        return;
+      }
+
+      let active = true;
+
+      async function loadMemories() {
+        setLoading(true);
+        setError('');
+
+        try {
+          const token = await getAuthToken();
+
+          if (!token) {
+            throw new Error(
+              'Please log in again to view your memories.',
+            );
+          }
+
+          const response = await fetch(
+            `${API_BASE_URL}/api/memories/map`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              data.error || 'Unable to load the Memory Map.',
+            );
+          }
+
+          const loadedMemories: MapMemory[] = Array.isArray(
+            data.memories,
+          )
+            ? data.memories.filter(validCoordinates)
+            : [];
+
+          if (active) {
+            setMemories(loadedMemories);
+          }
+        } catch (err) {
+          if (active) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : 'Unable to load the Memory Map.',
+            );
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
+        }
+      }
+
+  loadMemories().catch(err => {
+    if (active) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load the Memory Map.',
+      );
+      setLoading(false);
+    }
+  });
+      return () => {
+        active = false;
+      };
+    }, [isSelectingLocation, revision]),
+  );
+
+  // Use the existing searchable location picker
+  // when adding a location to a memory.
+  if (isSelectingLocation) {
+    return (
+      <MemoryLocationPicker
+        initial={null}
+        onClose={() => navigation.goBack()}
+        onSave={(location: MemoryLocation) => {
+          route.params?.onSelectLocation?.(location);
+          navigation.goBack();
+        }}
+      />
+    );
+  }
+
+  function openMemory(memoryId: string) {
+    const memory = memories.find(item => item.id === memoryId);
+
+    if (!memory) {
+      return;
+    }
+
+    const capsule = capsules.find(
+      item => item.id === memory.capsuleId,
+    );
+
+    if (capsule) {
+      navigation.navigate('CapsuleDetails', {
+        capsule,
+        memoryId,
+      });
+    } else {
+      setError(
+        'Could not find this capsule. Return to My Capsules and refresh.',
+      );
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -97,88 +154,62 @@ function MemoryMapScreen({ navigation, route }: any) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>
+            ← Back
+          </Text>
         </TouchableOpacity>
+
         <View style={styles.header}>
-          <Text style={styles.title}>MEMORY MAP</Text>
+          <Text style={styles.title}>
+            MEMORY MAP
+          </Text>
+
           <Text style={styles.subtitle}>
             See where your favorite memories were made.
           </Text>
         </View>
+
         <View style={styles.mapContainer}>
-          <AndroidMapWebView
-            originWhitelist={['*']}
-            source={{ html: mapHTML }}
-            style={styles.map}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            onMessage={(event: WebViewMessageEvent): void => {
-          if (!isSelectingLocation) return;
-
-          try {
-            const data = JSON.parse(event.nativeEvent.data);
-
-
-          if (data.type === 'LOCATION_SELECTED') {
-            setSelectedLocation({
-              latitude: data.latitude,
-              longitude: data.longitude,
-          });
-        }
-      } catch (error) {
-        console.log('Map message error:', error);
-      }
-    }}
-  />
-    </View>
-    {isSelectingLocation && (
-  <TouchableOpacity
-    style={[
-      styles.confirmButton,
-      !selectedLocation && { opacity: 0.5 },
-    ]}
-    disabled={!selectedLocation}
-    onPress={() => {
-      if (!selectedLocation) return;
-
-      route.params?.onSelectLocation?.(selectedLocation);
-
-      navigation.goBack();
-    }}
-  >
-    <Text style={styles.confirmButtonText}>
-      CONFIRM LOCATION
-    </Text>
-  </TouchableOpacity>
-)}
-
-        {/* Placeholder content */}
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>
-            No memories on the map yet
-          </Text>
-
-          <Text style={styles.emptyText}>
-            Locations connected to your memories will appear here.
-          </Text>
+          <MemoryMapView
+            memories={memories}
+            onOpen={openMemory}
+          />
         </View>
+
         {loading ? (
-          <ActivityIndicator color="#735641" />
+          <View style={styles.statusCard}>
+            <ActivityIndicator color="#735641" />
+            <Text style={styles.emptyText}>
+              Loading your memories...
+            </Text>
+          </View>
         ) : error ? (
-          <TouchableOpacity onPress={() => setRevision(n => n + 1)}>
-            <Text style={styles.emptyText}>{error} Tap to retry.</Text>
+          <TouchableOpacity
+            style={styles.emptyCard}
+            onPress={() => setRevision(n => n + 1)}
+          >
+            <Text style={styles.emptyTitle}>
+              Unable to load memories
+            </Text>
+            <Text style={styles.emptyText}>
+              {error}
+            </Text>
+            <Text style={styles.retryText}>
+              Tap to retry
+            </Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>
-              {memories.length
+              {memories.length > 0
                 ? `${memories.length} memories on the map`
                 : 'No opened memories on the map yet'}
             </Text>
+
             <Text style={styles.emptyText}>
-              {memories.length
-                ? 'Tap a pin to see photos and open the linked memory.'
-                : 'Add a location when saving a memory. Its photo and pin appear after the capsule opens.'}
+              {memories.length > 0
+                ? 'Tap a pin to view photos and open the linked memory.'
+                : 'Add a location when saving a memory. Its pin will appear after the capsule unlocks.'}
             </Text>
           </View>
         )}
@@ -192,30 +223,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#E8D8BE',
   },
-
   container: {
     flex: 1,
     backgroundColor: '#E8D8BE',
     padding: 20,
   },
-
   backButton: {
     alignSelf: 'flex-start',
     marginTop: 8,
     marginBottom: 8,
   },
-
   backButtonText: {
     color: '#735641',
     fontSize: 16,
     fontWeight: '700',
   },
-
   header: {
     alignItems: 'center',
     marginBottom: 14,
   },
-
   title: {
     fontSize: 26,
     fontWeight: '800',
@@ -223,7 +249,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textAlign: 'center',
   },
-
   subtitle: {
     fontSize: 14,
     color: '#806A58',
@@ -231,57 +256,44 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
   },
-
   mapContainer: {
     flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#BFA88D',
-    overflow: 'hidden',
+    minHeight: 260,
     marginBottom: 20,
-    backgroundColor: '#F8F0E3',
   },
-
-  map: {
-    flex: 1,
-  },
-
   emptyCard: {
     backgroundColor: '#F8F0E3',
     borderWidth: 1,
     borderColor: '#BFA88D',
     borderRadius: 14,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
   },
-
+  statusCard: {
+    backgroundColor: '#F8F0E3',
+    borderRadius: 14,
+    padding: 20,
+    alignItems: 'center',
+    gap: 10,
+  },
   emptyTitle: {
     fontSize: 17,
     fontWeight: '700',
     color: '#50382B',
     marginBottom: 8,
+    textAlign: 'center',
   },
-
   emptyText: {
     fontSize: 14,
     color: '#806A58',
     textAlign: 'center',
   },
-  confirmButton: {
-  backgroundColor: '#735641',
-  height: 54,
-  borderRadius: 8,
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginBottom: 16,
-},
-
-confirmButtonText: {
-  color: '#FFFFFF',
-  fontSize: 15,
-  fontWeight: '800',
-  letterSpacing: 1,
-},
+  retryText: {
+    fontSize: 14,
+    color: '#735641',
+    fontWeight: '700',
+    marginTop: 10,
+  },
 });
 
 export default MemoryMapScreen;

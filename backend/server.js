@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const crypto = require("node:crypto");
 const jwt = require("jsonwebtoken");
 const { FRIEND_REQUESTS_SCHEMA, registerFriendRoutes } = require("./friends");
+const { registerDirectMessageRoutes, DIRECT_MESSAGES_SCHEMA } = require("./directMessages");
 
 const {
   loadEnvironment,
@@ -28,6 +29,8 @@ registerMemoryMapRoutes(app, () => pool, authenticateUser);
 
 // Friend routes share the existing login middleware and MySQL connection pool.
 registerFriendRoutes(app, () => pool, authenticateUser);
+
+registerDirectMessageRoutes(app, () => pool, authenticateUser);
 
 // Checks whether the backend and database are connected.
 app.get("/api/health", async (req, res) => {
@@ -875,6 +878,7 @@ async function startServer() {
 
   // Add persistent friend requests to existing databases without resetting their data.
   await pool.query(FRIEND_REQUESTS_SCHEMA);
+  await pool.query(DIRECT_MESSAGES_SCHEMA);
   await ensureMemoryLocationSchema(pool);
 
   app.listen(PORT, "0.0.0.0", () => {
